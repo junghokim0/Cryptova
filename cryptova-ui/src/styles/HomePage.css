@@ -1,0 +1,974 @@
+.home-page {
+  position: relative;
+  width: 100vw;
+  min-height: 100vh;
+  overflow: hidden;
+  padding: 20px 34px 38px;
+  color: #f8fafc;
+  background:
+    radial-gradient(circle at 18% 72%, rgba(14, 165, 233, 0.24), transparent 27%),
+    radial-gradient(circle at 76% 26%, rgba(37, 99, 235, 0.18), transparent 25%),
+    linear-gradient(135deg, #020617 0%, #030712 45%, #050816 100%);
+}
+
+.home-bg-grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.22;
+  background:
+    radial-gradient(circle, rgba(59, 130, 246, 0.8) 1px, transparent 1px);
+  background-size: 104px 104px;
+}
+
+.home-glow {
+  position: absolute;
+  width: 680px;
+  height: 260px;
+  border-radius: 999px;
+  filter: blur(48px);
+  opacity: 0.36;
+  background: linear-gradient(90deg, transparent, #2563eb, #38bdf8, transparent);
+}
+
+.home-glow-left {
+  left: -120px;
+  bottom: 150px;
+  transform: rotate(-10deg);
+}
+
+.home-glow-right {
+  right: -130px;
+  top: 180px;
+  transform: rotate(-18deg);
+}
+
+.home-wave {
+  position: absolute;
+  left: -80px;
+  bottom: 180px;
+  width: 620px;
+  height: 160px;
+  opacity: 0.7;
+  background:
+    radial-gradient(circle at 30% 50%, rgba(37, 99, 235, 0.9), transparent 4%),
+    linear-gradient(110deg, transparent 0%, rgba(37, 99, 235, 0.2) 40%, rgba(56, 189, 248, 0.55) 50%, transparent 70%);
+  filter: blur(1px);
+  transform: rotate(-8deg);
+}
+
+.home-navbar,
+.home-main,
+.feature-panel {
+  position: relative;
+  z-index: 5;
+}
+
+/* =========================
+   Navbar
+========================= */
+
+.home-navbar {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 42px;
+}
+
+.home-logo-button {
+  width: 210px;
+  height: 64px;
+  border: 0;
+  padding: 0;
+  background: rgba(2, 6, 23, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  cursor: pointer;
+}
+
+.home-logo {
+  width: 205px;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 0 16px rgba(56, 189, 248, 0.45));
+}
+
+.home-nav-menu {
+  display: flex;
+  align-items: center;
+  gap: 34px;
+  height: 100%;
+}
+
+.nav-link {
+  position: relative;
+  border: 0;
+  background: transparent;
+  color: #e5e7eb;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 22px 0;
+  opacity: 0.9;
+  transition:
+    color 0.2s ease,
+    opacity 0.2s ease,
+    text-shadow 0.2s ease;
+}
+
+.nav-link:hover {
+  color: #ffffff;
+  opacity: 1;
+  text-shadow: 0 0 10px rgba(59, 130, 246, 0.75);
+}
+
+/* 기본 밑줄: hover용 */
+.nav-link::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  right: 50%;
+  bottom: 0;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #1d4ed8, #38bdf8, #2563ff);
+  box-shadow:
+    0 0 12px rgba(37, 99, 235, 0.75),
+    0 0 24px rgba(56, 189, 248, 0.45);
+  opacity: 0;
+  transition:
+    left 0.25s ease,
+    right 0.25s ease,
+    opacity 0.25s ease;
+}
+
+/* 마우스 올렸을 때 반짝이는 밑줄 */
+.nav-link:hover::after {
+  left: 0;
+  right: 0;
+  opacity: 1;
+  animation: navGlow 1.2s ease-in-out infinite alternate;
+}
+
+/* 현재 선택된 메뉴 */
+.nav-link.active {
+  color: #ffffff;
+  opacity: 1;
+}
+
+/* 현재 선택된 메뉴는 항상 밑줄 유지 */
+.nav-link.active::after {
+  left: 0;
+  right: 0;
+  opacity: 1;
+  animation: navGlow 1.4s ease-in-out infinite alternate;
+}
+
+@keyframes navGlow {
+  0% {
+    box-shadow:
+      0 0 8px rgba(37, 99, 235, 0.65),
+      0 0 16px rgba(56, 189, 248, 0.3);
+  }
+
+  100% {
+    box-shadow:
+      0 0 14px rgba(37, 99, 235, 0.95),
+      0 0 30px rgba(56, 189, 248, 0.65);
+  }
+}
+
+.nav-login-button {
+  margin-left: auto;
+  height: 42px;
+  padding: 0 18px;
+  border: 1px solid rgba(37, 99, 235, 0.6);
+  border-radius: 8px;
+  background: rgba(2, 6, 23, 0.56);
+  color: #f8fafc;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: inset 0 0 20px rgba(37, 99, 235, 0.08);
+}
+
+.nav-user-icon {
+  margin-right: 9px;
+  color: #cbd5e1;
+}
+
+/* =========================
+   Main Hero Layout
+========================= */
+
+.home-main {
+  display: grid;
+  grid-template-columns: minmax(420px, 0.78fr) minmax(1040px, 1.7fr);
+  gap: 22px;
+  min-height: 585px;
+  align-items: center;
+  padding-top: 32px;
+
+  /* 전체 hero 영역을 오른쪽으로 이동 */
+  transform: translateX(150px);
+}
+
+.hero-left {
+  padding-top: 12px;
+  z-index: 7;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 13px;
+  margin-bottom: 30px;
+  border: 1px solid rgba(37, 99, 235, 0.55);
+  border-radius: 9px;
+  background: rgba(2, 6, 23, 0.54);
+  color: #3b82f6;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.eyebrow-icon {
+  color: #60a5fa;
+}
+
+.hero-left h1 {
+  margin: 0;
+  font-size: clamp(44px, 4vw, 72px);
+  line-height: 1.14;
+  letter-spacing: -2px;
+  font-weight: 800;
+}
+
+.hero-left h1 span {
+  color: #2563ff;
+  text-shadow: 0 0 28px rgba(37, 99, 235, 0.42);
+}
+
+.hero-description {
+  width: min(520px, 100%);
+  margin: 26px 0 34px;
+  color: #9ca3af;
+  font-size: 18px;
+  line-height: 1.7;
+  font-weight: 500;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.primary-action,
+.secondary-action {
+  height: 56px;
+  padding: 0 28px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #f8fafc;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.primary-action {
+  border: 0;
+  background: linear-gradient(180deg, #2563ff 0%, #1d4ed8 100%);
+  box-shadow: 0 16px 34px rgba(37, 99, 235, 0.32);
+}
+
+.primary-action span,
+.secondary-action span {
+  margin-left: 8px;
+}
+
+.secondary-action {
+  border: 1px solid rgba(37, 99, 235, 0.45);
+  background: rgba(2, 6, 23, 0.5);
+  box-shadow: inset 0 0 24px rgba(37, 99, 235, 0.07);
+}
+
+/* =========================
+   Hero Visual
+   핵심 수정:
+   1. grid gap 크게
+   2. trading-card width를 살짝 줄임
+   3. signal-card와 겹치지 않게 분리
+========================= */
+
+.hero-visual {
+  display: grid;
+  grid-template-columns: minmax(660px, 780px) 250px;
+  gap: 82px;
+  align-items: center;
+  justify-content: start;
+  min-width: 0;
+
+  /* 카드 묶음 왼쪽 이동을 줄임 */
+  transform: translateX(-35px);
+}
+
+.trading-card {
+  min-height: 465px;
+  width: 100%;
+  max-width: 780px;
+  padding: 28px 30px 26px;
+  border: 1px solid rgba(37, 99, 235, 0.72);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.8), rgba(2, 6, 23, 0.92)),
+    rgba(2, 6, 23, 0.9);
+  box-shadow:
+    0 0 36px rgba(37, 99, 235, 0.28),
+    inset 0 0 30px rgba(37, 99, 235, 0.06);
+
+  /* signal-card와 같은 방향으로 휘게 */
+  transform: perspective(1000px) rotateY(-5deg) rotateZ(2deg);
+  transform-origin: center center;
+
+  min-width: 0;
+  overflow: hidden;
+}
+
+.trading-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.pair {
+  margin: 0 0 10px;
+  color: #f8fafc;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.trading-card h2 {
+  margin: 0;
+  font-size: 29px;
+  letter-spacing: -1px;
+}
+
+.trading-card h2 span {
+  font-size: 15px;
+  color: #22c55e;
+}
+
+.metric-row {
+  display: flex;
+  gap: 10px;
+}
+
+.mini-metric {
+  width: 118px;
+  padding: 12px 13px;
+  border: 1px solid rgba(30, 41, 59, 0.95);
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.5);
+}
+
+.mini-metric p {
+  margin: 0 0 8px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-style: italic;
+}
+
+.mini-metric strong {
+  display: block;
+  color: #f8fafc;
+  font-size: 13px;
+}
+
+.mini-metric span,
+.mini-metric.green strong {
+  color: #22c55e;
+}
+
+.mini-metric span {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.chart-toolbar {
+  margin-top: 22px;
+  display: flex;
+  justify-content: space-between;
+  color: #cbd5e1;
+}
+
+.chart-toolbar button {
+  border: 0;
+  background: transparent;
+  color: #cbd5e1;
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chart-toolbar button.selected {
+  background: #2563ff;
+  color: #ffffff;
+}
+
+.fake-chart {
+  position: relative;
+  height: 315px;
+  margin-top: 6px;
+}
+
+.fake-chart svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.grid-lines line {
+  stroke: rgba(71, 85, 105, 0.25);
+  stroke-width: 1;
+}
+
+.chart-line {
+  fill: none;
+  stroke: url(#lineGlow);
+  stroke-width: 2.6;
+  filter: drop-shadow(0 0 8px rgba(37, 99, 235, 0.8));
+}
+
+.chart-line-soft {
+  fill: none;
+  stroke: rgba(37, 99, 235, 0.35);
+  stroke-width: 1.4;
+}
+
+.candle-svg line {
+  stroke-width: 2;
+}
+
+.candle-svg rect {
+  opacity: 0.95;
+}
+
+.candle-svg.up line,
+.candle-svg.up rect {
+  stroke: #38bdf8;
+  fill: #38bdf8;
+}
+
+.candle-svg.down line,
+.candle-svg.down rect {
+  stroke: #ef4444;
+  fill: #ef4444;
+}
+
+.price-label {
+  position: absolute;
+  top: 96px;
+  right: 48px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  background: #2563ff;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.chart-axis.right {
+  position: absolute;
+  top: 26px;
+  right: 0;
+  height: 230px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: #cbd5e1;
+  font-size: 11px;
+}
+
+.chart-axis.bottom {
+  position: absolute;
+  left: 0;
+  right: 74px;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  color: #cbd5e1;
+  font-size: 11px;
+}
+
+/* =========================
+   AI Signal Card
+========================= */
+
+.signal-card {
+  min-height: 470px;
+  width: 250px;
+  padding: 22px 18px;
+  border: 1px solid rgba(37, 99, 235, 0.7);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.78), rgba(2, 6, 23, 0.94)),
+    rgba(2, 6, 23, 0.9);
+  box-shadow:
+    0 0 30px rgba(37, 99, 235, 0.2),
+    inset 0 0 24px rgba(37, 99, 235, 0.05);
+
+  /* trading-card와 같은 방향 */
+  transform: perspective(900px) rotateY(-7deg) rotateZ(2deg);
+  transform-origin: center center;
+
+  min-width: 0;
+}
+
+.signal-card h3 {
+  margin: 0 0 18px;
+  font-size: 18px;
+}
+
+.signal-gauge {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 18px;
+  border-bottom: 1px solid rgba(71, 85, 105, 0.36);
+}
+
+.gauge-ring {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background:
+    conic-gradient(#4ade80 0deg 275deg, rgba(71, 85, 105, 0.4) 275deg 360deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 28px rgba(34, 197, 94, 0.18);
+}
+
+.gauge-inner {
+  width: 108px;
+  height: 108px;
+  border-radius: 50%;
+  background: #06111f;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.gauge-inner strong {
+  color: #4ade80;
+  font-size: 25px;
+  font-style: italic;
+}
+
+.gauge-inner span {
+  margin-top: 6px;
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+.gauge-inner b {
+  color: #f8fafc;
+  font-size: 18px;
+}
+
+.signal-history h4 {
+  margin: 18px 0 14px;
+  font-size: 14px;
+  color: #cbd5e1;
+}
+
+.signal-item {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.signal-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.signal-icon.up {
+  background: #22c55e;
+}
+
+.signal-icon.down {
+  background: #ef4444;
+}
+
+.signal-info strong {
+  display: block;
+  font-size: 12px;
+}
+
+.signal-info strong.long {
+  color: #22c55e;
+}
+
+.signal-info strong.short {
+  color: #ef4444;
+}
+
+.signal-info p,
+.signal-info small {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 11px;
+}
+
+.signal-meta {
+  text-align: right;
+}
+
+.signal-meta span {
+  display: block;
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.signal-meta strong {
+  display: block;
+  margin-top: 4px;
+  color: #f8fafc;
+  font-size: 11px;
+}
+
+/* =========================
+   Feature Panel
+========================= */
+
+.feature-panel {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  min-height: 170px;
+
+  /* 위쪽 hero 영역과 간격 벌리기 */
+  margin-top: 150px;
+
+  border: 1px solid rgba(37, 99, 235, 0.42);
+  border-radius: 14px;
+  background: rgba(2, 6, 23, 0.58);
+  box-shadow: inset 0 0 30px rgba(37, 99, 235, 0.07);
+}
+
+.feature-panel article {
+  display: flex;
+  gap: 22px;
+  align-items: center;
+  padding: 30px 40px;
+  border-right: 1px solid rgba(37, 99, 235, 0.18);
+}
+
+.feature-panel article:last-child {
+  border-right: 0;
+}
+
+.feature-icon {
+  position: relative;
+  flex: 0 0 52px;
+  width: 52px;
+  height: 52px;
+  color: #2563ff;
+  filter: drop-shadow(0 0 14px rgba(37, 99, 235, 0.72));
+}
+
+/* AI Market Analysis - line circuit icon */
+.ai-icon {
+  border: 2px solid #2563ff;
+  border-radius: 16px;
+}
+
+.ai-core {
+  position: absolute;
+  left: 18px;
+  top: 18px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #38bdf8;
+  border-radius: 50%;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.8);
+}
+
+.ai-node {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2563ff;
+  box-shadow: 0 0 10px rgba(37, 99, 235, 0.9);
+}
+
+.node-1 {
+  left: 9px;
+  top: 9px;
+}
+
+.node-2 {
+  right: 9px;
+  top: 10px;
+}
+
+.node-3 {
+  left: 10px;
+  bottom: 9px;
+}
+
+.node-4 {
+  right: 9px;
+  bottom: 10px;
+}
+
+.ai-icon::before,
+.ai-icon::after {
+  content: "";
+  position: absolute;
+  background: rgba(56, 189, 248, 0.9);
+}
+
+.ai-icon::before {
+  left: 13px;
+  top: 25px;
+  width: 26px;
+  height: 2px;
+}
+
+.ai-icon::after {
+  left: 25px;
+  top: 13px;
+  width: 2px;
+  height: 26px;
+}
+
+/* Automated Trading - lightning icon */
+.lightning-icon span {
+  position: absolute;
+  left: 17px;
+  top: 5px;
+  width: 22px;
+  height: 42px;
+  background: linear-gradient(180deg, #38bdf8, #2563ff);
+  clip-path: polygon(48% 0, 100% 0, 64% 42%, 100% 42%, 35% 100%, 50% 54%, 12% 54%);
+  box-shadow: 0 0 16px rgba(37, 99, 235, 0.9);
+}
+
+/* Backtesting & Simulation - bar icon */
+.bars-icon {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 7px;
+  padding-bottom: 5px;
+}
+
+.bars-icon span {
+  width: 8px;
+  border: 2px solid #2563ff;
+  border-radius: 4px 4px 0 0;
+  background: rgba(37, 99, 235, 0.18);
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.55);
+}
+
+.bars-icon span:nth-child(1) {
+  height: 24px;
+}
+
+.bars-icon span:nth-child(2) {
+  height: 38px;
+}
+
+.bars-icon span:nth-child(3) {
+  height: 30px;
+}
+
+/* AI Trade Explanation - chat icon */
+.chat-icon {
+  border: 2px solid #2563ff;
+  border-radius: 10px;
+}
+
+.chat-icon::after {
+  content: "";
+  position: absolute;
+  left: 9px;
+  bottom: -8px;
+  width: 14px;
+  height: 14px;
+  border-left: 2px solid #2563ff;
+  border-bottom: 2px solid #2563ff;
+  transform: rotate(-25deg);
+  background: #020617;
+}
+
+.chat-icon span {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 16px;
+  height: 2px;
+  background: #38bdf8;
+  box-shadow:
+    0 8px 0 rgba(56, 189, 248, 0.9),
+    0 16px 0 rgba(56, 189, 248, 0.6);
+}
+
+.feature-panel h3 {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+.feature-panel h3 span {
+  margin-left: 8px;
+  padding: 4px 7px;
+  border-radius: 5px;
+  background: #2563ff;
+  font-size: 11px;
+}
+
+.feature-panel p {
+  margin: 0;
+  color: #9ca3af;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* =========================
+   Responsive
+========================= */
+
+@media (max-width: 1500px) {
+  .home-main {
+    grid-template-columns: minmax(390px, 0.75fr) minmax(900px, 1.6fr);
+    gap: 16px;
+
+    /* 중간 화면에서도 전체를 오른쪽으로 */
+    transform: translateX(55px);
+  }
+
+  .hero-visual {
+    grid-template-columns: minmax(600px, 720px) 235px;
+    gap: 72px;
+
+    /* 카드 묶음 왼쪽 이동 줄이기 */
+    transform: translateX(-25px);
+  }
+
+
+  .trading-card {
+    max-width: 720px;
+    transform: perspective(1000px) rotateY(-4deg) rotateZ(1.5deg);
+  }
+
+  .signal-card {
+    width: 235px;
+    transform: perspective(900px) rotateY(-6deg) rotateZ(1.5deg);
+  }
+}
+
+@media (max-width: 1180px) {
+  .home-main {
+    grid-template-columns: 1fr;
+    transform: none;
+  }
+
+  .hero-visual {
+    grid-template-columns: 1fr;
+    transform: none;
+  }
+
+  .trading-card {
+    max-width: none;
+    transform: none;
+  }
+
+  .signal-card {
+    width: 100%;
+    min-height: auto;
+    transform: none;
+  }
+
+  .feature-panel {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .home-page {
+    padding: 18px;
+  }
+
+  .home-navbar {
+    gap: 18px;
+  }
+
+  .home-nav-menu {
+    display: none;
+  }
+
+  .home-logo {
+    width: 150px;
+  }
+
+  .nav-login-button {
+    height: 38px;
+    font-size: 12px;
+    padding: 0 12px;
+  }
+
+  .home-main {
+    padding-top: 30px;
+  }
+
+  .hero-left h1 {
+    font-size: 44px;
+  }
+
+  .hero-description {
+    font-size: 15px;
+  }
+
+  .hero-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .trading-card {
+    padding: 22px 18px;
+  }
+
+  .trading-card-header {
+    flex-direction: column;
+  }
+
+  .metric-row {
+    flex-wrap: wrap;
+  }
+
+  .feature-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .feature-panel article {
+    border-right: 0;
+    border-bottom: 1px solid rgba(37, 99, 235, 0.18);
+  }
+
+  .feature-panel article:last-child {
+    border-bottom: 0;
+  }
+}
