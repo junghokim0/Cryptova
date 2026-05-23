@@ -386,6 +386,28 @@
   cursor: pointer;
 }
 
+.save-settings-button {
+  width: 100%;
+  height: 46px;
+  margin-top: 12px;
+  border: 1px solid rgba(34, 197, 94, 0.7);
+  border-radius: 8px;
+  background: rgba(22, 101, 52, 0.22);
+  color: #4ade80;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.save-settings-button:hover {
+  background: rgba(22, 101, 52, 0.32);
+}
+
+.save-settings-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .start-trading-button {
   width: 100%;
   height: 58px;
@@ -934,4 +956,27 @@
   .chart-metrics {
     grid-template-columns: 1fr;
   }
+}
+
+.settings-success-message {
+  margin: 10px 0 0;
+  padding: 9px 10px;
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  border-radius: 7px;
+  background: rgba(22, 101, 52, 0.18);
+  color: #86efac;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settings-error-message {
+  margin: 10px 0 0;
+  padding: 9px 10px;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  border-radius: 7px;
+  background: rgba(127, 29, 29, 0.2);
+  color: #fecaca;
+  font-size: 13px;
+  font-weight: 700;
+}
 }

@@ -1,7 +1,7 @@
 import "../styles/HomePage.css";
 import logo from "../assets/logo.png";
 
-function HomePage({ onGoTrading, onGoLogin, onGoSignup, onGoHistory, onGoBacktest }) {
+function HomePage({ user, onGoHome,onGoTrading, onGoLogin, onGoSignup, onGoHistory, onGoBacktest, onLogout }) {
   const signalHistory = [
     {
       type: "LONG",
@@ -53,7 +53,7 @@ function HomePage({ onGoTrading, onGoLogin, onGoSignup, onGoHistory, onGoBacktes
       <div className="home-wave" />
 
       <header className="home-navbar">
-        <button type="button" className="home-logo-button">
+        <button type="button" className="home-logo-button" onClick={onGoHome}>
           <img src={logo} alt="Cryptova Logo" className="home-logo" />
         </button>
 
@@ -69,10 +69,17 @@ function HomePage({ onGoTrading, onGoLogin, onGoSignup, onGoHistory, onGoBacktes
           </button>
         </nav>
 
-        <button type="button" className="nav-login-button" onClick={onGoLogin}>
-          <span className="nav-user-icon">♙</span>
-          Login / Sign Up
-        </button>
+        {user ? (
+          <button type="button" className="nav-login-button" onClick={onLogout}>
+            <span className="nav-user-icon">♙</span>
+            Logout
+          </button>
+        ) : (
+          <button type="button" className="nav-login-button" onClick={onGoLogin}>
+            <span className="nav-user-icon">♙</span>
+            Login / Sign Up
+          </button>
+        )}
       </header>
 
       <main className="home-main">

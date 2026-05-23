@@ -464,4 +464,21 @@
     right: 20px;
     font-size: 34px;
   }
+.auth-error-message {
+  margin: -4px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  border-radius: 8px;
+  background: rgba(127, 29, 29, 0.22);
+  color: #fecaca;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.login-button:disabled,
+.signup-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+}
 }

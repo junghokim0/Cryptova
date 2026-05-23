@@ -867,4 +867,36 @@
   .asset-button {
     min-width: 150px;
   }
+  .logout-profile {
+  width: auto;
+  min-width: 82px;
+  padding: 0 14px;
+  border-radius: 8px;
+}
+}
+.run-backtest-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.backtest-success-message {
+  margin: 12px 0 0;
+  padding: 9px 10px;
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  border-radius: 7px;
+  background: rgba(22, 101, 52, 0.18);
+  color: #86efac;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.backtest-error-message {
+  margin: 12px 0 0;
+  padding: 9px 10px;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  border-radius: 7px;
+  background: rgba(127, 29, 29, 0.2);
+  color: #fecaca;
+  font-size: 13px;
+  font-weight: 700;
 }

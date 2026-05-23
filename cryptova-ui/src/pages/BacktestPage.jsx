@@ -1,19 +1,148 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "../styles/BacktestPage.css";
 import logo from "../assets/logo.png";
+import { getBacktestResults, runBacktest } from "../api/backtestApi";
 
 const initialSettings = {
   confidence: 65,
   holdingPeriod: 24,
   positionSize: 5,
   maxDrawdown: -10,
-  fundingThreshold: 0.0001,
-  volatilityThreshold: 0.015,
 };
 
-function BacktestPage({ onGoHome, onGoTrading, onGoHistory, onGoLogin }) {
+const defaultResult = {
+  total_return: 28.63,
+  cagr: 23.41,
+  sharpe: 1.82,
+  mdd: -8.21,
+  win_rate: 62.14,
+  trade_count: 124,
+  start_date: "2024-01-01",
+  end_date: "2025-05-20",
+  created_at: "2025-05-20T15:30:21",
+  result_json: {
+    monthly_returns: [
+      "+3.21",
+      "-1.84",
+      "+4.57",
+      "+2.31",
+      "+6.72",
+      "-2.11",
+      "+3.88",
+      "+1.25",
+      "-3.45",
+      "+5.19",
+      "+2.73",
+      "+7.02",
+      "+4.23",
+      "-1.73",
+      "+2.96",
+      "+3.83",
+      "+2.44",
+    ],
+    trade_stats: {
+      long_count: 78,
+      short_count: 28,
+      hold_count: 18,
+      long_win_rate: 67.95,
+      short_win_rate: 57.14,
+      avg_holding_time: "18.6h",
+      avg_win: "+2.31%",
+      avg_loss: "-1.78%",
+      profit_factor: 1.94,
+    },
+    top_winning_trades: [
+      { date: "2024-12-11", side: "LONG", return: "+4.86%" },
+      { date: "2024-10-28", side: "LONG", return: "+4.21%" },
+      { date: "2025-01-15", side: "LONG", return: "+3.96%" },
+      { date: "2024-03-05", side: "LONG", return: "+3.77%" },
+      { date: "2024-07-22", side: "SHORT", return: "+3.45%" },
+    ],
+    top_losing_trades: [
+      { date: "2024-08-07", side: "LONG", return: "-3.45%" },
+      { date: "2024-06-18", side: "LONG", return: "-3.21%" },
+      { date: "2024-09-03", side: "SHORT", return: "-2.98%" },
+      { date: "2025-02-12", side: "LONG", return: "-2.72%" },
+      { date: "2024-11-14", side: "SHORT", return: "-2.45%" },
+    ],
+  },
+};
+
+function formatDateTime(value) {
+  if (!value) return "-";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const hh = String(date.getHours()).padStart(2, "0");
+  const min = String(date.getMinutes()).padStart(2, "0");
+  const sec = String(date.getSeconds()).padStart(2, "0");
+
+  return `${yyyy}-${mm}-${dd} ${hh}:${min}:${sec}`;
+}
+
+function BacktestPage({
+  user,
+  onGoHome,
+  onGoTrading,
+  onGoHistory,
+  onGoLogin,
+  onLogout,
+}) {
   const [settings, setSettings] = useState(initialSettings);
   const [isAssetOpen, setIsAssetOpen] = useState(true);
+
+  const [currentResult, setCurrentResult] = useState(defaultResult);
+  const [isRunning, setIsRunning] = useState(false);
+  const [backtestMessage, setBacktestMessage] = useState("");
+  const [backtestError, setBacktestError] = useState("");
+
+  const resultJson = currentResult?.result_json || {};
+
+  const monthlyReturns = useMemo(() => {
+    return resultJson.monthly_returns || defaultResult.result_json.monthly_returns;
+  }, [resultJson.monthly_returns]);
+
+  const tradeStats = useMemo(() => {
+    return resultJson.trade_stats || defaultResult.result_json.trade_stats;
+  }, [resultJson.trade_stats]);
+
+  const topWinningTrades = useMemo(() => {
+    return (
+      resultJson.top_winning_trades ||
+      defaultResult.result_json.top_winning_trades
+    );
+  }, [resultJson.top_winning_trades]);
+
+  const topLosingTrades = useMemo(() => {
+    return (
+      resultJson.top_losing_trades || defaultResult.result_json.top_losing_trades
+    );
+  }, [resultJson.top_losing_trades]);
+
+  useEffect(() => {
+    async function loadLatestBacktest() {
+      if (!user) return;
+
+      try {
+        const results = await getBacktestResults();
+
+        if (results.length > 0) {
+          setCurrentResult(results[0]);
+        }
+      } catch (error) {
+        setBacktestError(error.message || "Failed to load backtest results.");
+      }
+    }
+
+    loadLatestBacktest();
+  }, [user]);
 
   const updateSetting = (key, value) => {
     setSettings((prev) => ({
@@ -24,6 +153,38 @@ function BacktestPage({ onGoHome, onGoTrading, onGoHistory, onGoLogin }) {
 
   const resetSettings = () => {
     setSettings(initialSettings);
+    setBacktestMessage("");
+    setBacktestError("");
+  };
+
+  const handleRunBacktest = async () => {
+    setBacktestMessage("");
+    setBacktestError("");
+
+    if (!user) {
+      setBacktestError("Please login before running backtest.");
+      return;
+    }
+
+    try {
+      setIsRunning(true);
+
+      const result = await runBacktest({
+        symbol: "BTCUSDT",
+        start_date: "2024-01-01",
+        end_date: "2025-05-20",
+        confidence_threshold: settings.confidence,
+        position_size: settings.positionSize,
+        max_drawdown_stop: settings.maxDrawdown,
+      });
+
+      setCurrentResult(result);
+      setBacktestMessage("Backtest completed and saved successfully.");
+    } catch (error) {
+      setBacktestError(error.message || "Failed to run backtest.");
+    } finally {
+      setIsRunning(false);
+    }
   };
 
   return (
@@ -65,12 +226,28 @@ function BacktestPage({ onGoHome, onGoTrading, onGoHistory, onGoLogin }) {
         <button className="icon-button">♧</button>
         <button className="icon-button">⚙</button>
 
-        <button type="button" className="profile-button" onClick={onGoLogin}>
-          JD⌄
-        </button>
+        {user ? (
+          <button
+            type="button"
+            className="profile-button logout-profile"
+            onClick={onLogout}
+          >
+            Logout
+          </button>
+        ) : (
+          <button type="button" className="profile-button" onClick={onGoLogin}>
+            Login
+          </button>
+        )}
       </header>
 
-      <main className={isAssetOpen ? "backtest-layout asset-open" : "backtest-layout asset-closed"}>
+      <main
+        className={
+          isAssetOpen
+            ? "backtest-layout asset-open"
+            : "backtest-layout asset-closed"
+        }
+      >
         <aside className="backtest-sidebar">
           <div className="sidebar-title-row">
             <h2>Strategy Settings</h2>
@@ -93,7 +270,9 @@ function BacktestPage({ onGoHome, onGoTrading, onGoHistory, onGoLogin }) {
                 max="90"
                 step="1"
                 value={settings.confidence}
-                onChange={(e) => updateSetting("confidence", Number(e.target.value))}
+                onChange={(e) =>
+                  updateSetting("confidence", Number(e.target.value))
+                }
                 style={{
                   "--value": `${((settings.confidence - 50) / 40) * 100}%`,
                 }}
@@ -125,7 +304,9 @@ function BacktestPage({ onGoHome, onGoTrading, onGoHistory, onGoLogin }) {
                 max="20"
                 step="1"
                 value={settings.positionSize}
-                onChange={(e) => updateSetting("positionSize", Number(e.target.value))}
+                onChange={(e) =>
+                  updateSetting("positionSize", Number(e.target.value))
+                }
                 style={{
                   "--value": `${((settings.positionSize - 1) / 19) * 100}%`,
                 }}
@@ -149,7 +330,9 @@ function BacktestPage({ onGoHome, onGoTrading, onGoHistory, onGoLogin }) {
                 max="-5"
                 step="1"
                 value={settings.maxDrawdown}
-                onChange={(e) => updateSetting("maxDrawdown", Number(e.target.value))}
+                onChange={(e) =>
+                  updateSetting("maxDrawdown", Number(e.target.value))
+                }
                 style={{
                   "--value": `${((settings.maxDrawdown + 30) / 25) * 100}%`,
                 }}
@@ -164,75 +347,38 @@ function BacktestPage({ onGoHome, onGoTrading, onGoHistory, onGoLogin }) {
           </section>
 
           <section className="sidebar-section">
-            <h3>2. Filter Settings</h3>
-
-            <div className="bt-setting-block">
-              <div className="bt-setting-label">
-                <span>Funding Rate Threshold</span>
-                <b>{settings.fundingThreshold.toFixed(4)}</b>
-              </div>
-              <input
-                type="range"
-                min="-0.0005"
-                max="0.001"
-                step="0.0001"
-                value={settings.fundingThreshold}
-                onChange={(e) =>
-                  updateSetting("fundingThreshold", Number(e.target.value))
-                }
-                style={{
-                  "--value": `${((settings.fundingThreshold + 0.0005) / 0.0015) * 100}%`,
-                }}
-              />
-              <div className="range-scale">
-                <span>-0.0005</span>
-                <span>0</span>
-                <span>0.001</span>
-              </div>
-            </div>
-
-            <div className="bt-setting-block">
-              <div className="bt-setting-label">
-                <span>Volatility Threshold</span>
-                <b>{settings.volatilityThreshold.toFixed(3)}</b>
-              </div>
-              <input
-                type="range"
-                min="0.005"
-                max="0.03"
-                step="0.001"
-                value={settings.volatilityThreshold}
-                onChange={(e) =>
-                  updateSetting("volatilityThreshold", Number(e.target.value))
-                }
-                style={{
-                  "--value": `${((settings.volatilityThreshold - 0.005) / 0.025) * 100}%`,
-                }}
-              />
-              <div className="range-scale">
-                <span>0.005</span>
-                <span>0.015</span>
-                <span>0.030</span>
-              </div>
-            </div>
+            <h3>2. Risk Filter</h3>
 
             <div className="filter-rule-box">
-              <h4>Filter Rule</h4>
+              <h4>Default Risk Filter</h4>
               <p>
-                LONG signals are converted to HOLD when funding is high and
-                volatility is low.
+                Funding and volatility joint filter is automatically applied to
+                reduce risky LONG entries.
               </p>
               <code>
-                funding_rate &gt; threshold
+                high funding + low volatility
                 <br />
-                AND std_24h &lt; volatility_threshold
+                → LONG signal converted to HOLD
               </code>
             </div>
           </section>
 
-          <button type="button" className="run-backtest-button">
-            Run Backtest ▶
+          <button
+            type="button"
+            className="run-backtest-button"
+            onClick={handleRunBacktest}
+            disabled={isRunning}
+          >
+            {isRunning ? "Running..." : "Run Backtest ▶"}
           </button>
+
+          {backtestMessage && (
+            <p className="backtest-success-message">{backtestMessage}</p>
+          )}
+
+          {backtestError && (
+            <p className="backtest-error-message">{backtestError}</p>
+          )}
 
           <p className="data-period">Data period: 2024-01-01 ~ 2025-05-20</p>
         </aside>
@@ -241,40 +387,49 @@ function BacktestPage({ onGoHome, onGoTrading, onGoHistory, onGoLogin }) {
           <div className="dashboard-title-row">
             <div>
               <h1>Backtest Result Summary</h1>
-              <span>2024-01-01 ~ 2025-05-20 (Non-overlap)</span>
+              <span>
+                {currentResult.start_date} ~ {currentResult.end_date}{" "}
+                (Non-overlap)
+              </span>
             </div>
-            <p>Last updated: 2025-05-20 15:30:21 ⟳</p>
+            <p>Last updated: {formatDateTime(currentResult.created_at)} ⟳</p>
           </div>
 
           <section className="summary-grid">
             <article>
               <p>Total Return</p>
-              <strong className="positive">+28.63%</strong>
+              <strong className="positive">
+                +{Number(currentResult.total_return).toFixed(2)}%
+              </strong>
               <span>Cumulative Return</span>
             </article>
             <article>
               <p>CAGR</p>
-              <strong className="positive">+23.41%</strong>
+              <strong className="positive">
+                +{Number(currentResult.cagr).toFixed(2)}%
+              </strong>
               <span>Annualized Return</span>
             </article>
             <article>
               <p>Sharpe Ratio</p>
-              <strong>1.82</strong>
+              <strong>{Number(currentResult.sharpe).toFixed(2)}</strong>
               <span>Risk-adjusted</span>
             </article>
             <article>
               <p>Max Drawdown</p>
-              <strong className="negative">-8.21%</strong>
+              <strong className="negative">
+                {Number(currentResult.mdd).toFixed(2)}%
+              </strong>
               <span>MDD</span>
             </article>
             <article>
               <p>Win Rate</p>
-              <strong>62.14%</strong>
+              <strong>{Number(currentResult.win_rate).toFixed(2)}%</strong>
               <span>Winning Trades</span>
             </article>
             <article>
               <p>Trade Count</p>
-              <strong>124</strong>
+              <strong>{currentResult.trade_count}</strong>
               <span>Total Trades</span>
             </article>
           </section>
@@ -337,23 +492,54 @@ function BacktestPage({ onGoHome, onGoTrading, onGoHistory, onGoLogin }) {
                 <div className="donut-chart">
                   <div>
                     <span>Total</span>
-                    <strong>124</strong>
+                    <strong>{currentResult.trade_count}</strong>
                   </div>
                 </div>
                 <ul>
-                  <li><b className="green-dot" /> LONG 62.9% (78)</li>
-                  <li><b className="red-dot" /> SHORT 22.6% (28)</li>
-                  <li><b className="gray-dot" /> HOLD 14.5% (18)</li>
+                  <li>
+                    <b className="green-dot" /> LONG 62.9% (
+                    {tradeStats.long_count})
+                  </li>
+                  <li>
+                    <b className="red-dot" /> SHORT 22.6% (
+                    {tradeStats.short_count})
+                  </li>
+                  <li>
+                    <b className="gray-dot" /> HOLD 14.5% (
+                    {tradeStats.hold_count})
+                  </li>
                 </ul>
               </div>
 
               <div className="stats-list">
-                <p><span>LONG Win Rate</span><strong className="positive">67.95%</strong></p>
-                <p><span>SHORT Win Rate</span><strong className="positive">57.14%</strong></p>
-                <p><span>Avg Holding Time</span><strong>18.6h</strong></p>
-                <p><span>Avg Win</span><strong className="positive">+2.31%</strong></p>
-                <p><span>Avg Loss</span><strong className="negative">-1.78%</strong></p>
-                <p><span>Profit Factor</span><strong>1.94</strong></p>
+                <p>
+                  <span>LONG Win Rate</span>
+                  <strong className="positive">
+                    {tradeStats.long_win_rate}%
+                  </strong>
+                </p>
+                <p>
+                  <span>SHORT Win Rate</span>
+                  <strong className="positive">
+                    {tradeStats.short_win_rate}%
+                  </strong>
+                </p>
+                <p>
+                  <span>Avg Holding Time</span>
+                  <strong>{tradeStats.avg_holding_time}</strong>
+                </p>
+                <p>
+                  <span>Avg Win</span>
+                  <strong className="positive">{tradeStats.avg_win}</strong>
+                </p>
+                <p>
+                  <span>Avg Loss</span>
+                  <strong className="negative">{tradeStats.avg_loss}</strong>
+                </p>
+                <p>
+                  <span>Profit Factor</span>
+                  <strong>{tradeStats.profit_factor}</strong>
+                </p>
               </div>
             </article>
           </section>
@@ -361,15 +547,12 @@ function BacktestPage({ onGoHome, onGoTrading, onGoHistory, onGoLogin }) {
           <section className="monthly-card">
             <h2>Monthly Returns</h2>
             <div className="month-row">
-              {[
-                "+3.21", "-1.84", "+4.57", "+2.31", "+6.72",
-                "-2.11", "+3.88", "+1.25", "-3.45", "+5.19",
-                "+2.73", "+7.02", "+4.23", "-1.73", "+2.96",
-                "+3.83", "+2.44",
-              ].map((value, index) => (
+              {monthlyReturns.map((value, index) => (
                 <span
                   key={index}
-                  className={value.startsWith("+") ? "month-positive" : "month-negative"}
+                  className={
+                    value.startsWith("+") ? "month-positive" : "month-negative"
+                  }
                 >
                   {value}
                 </span>
@@ -385,7 +568,9 @@ function BacktestPage({ onGoHome, onGoTrading, onGoHistory, onGoLogin }) {
                   <span key={index} style={{ height: `${height}%` }} />
                 ))}
               </div>
-              <p>Average Return: <strong className="positive">+0.48%</strong></p>
+              <p>
+                Average Return: <strong className="positive">+0.48%</strong>
+              </p>
             </article>
 
             <article>
@@ -398,18 +583,25 @@ function BacktestPage({ onGoHome, onGoTrading, onGoHistory, onGoLogin }) {
                   />
                 </svg>
               </div>
-              <p>Max Drawdown: <strong className="negative">-8.21%</strong></p>
+              <p>
+                Max Drawdown:{" "}
+                <strong className="negative">
+                  {Number(currentResult.mdd).toFixed(2)}%
+                </strong>
+              </p>
             </article>
 
             <article>
               <h2>Top 5 Winning Trades</h2>
               <table>
                 <tbody>
-                  <tr><td>2024-12-11</td><td>LONG</td><td>+4.86%</td></tr>
-                  <tr><td>2024-10-28</td><td>LONG</td><td>+4.21%</td></tr>
-                  <tr><td>2025-01-15</td><td>LONG</td><td>+3.96%</td></tr>
-                  <tr><td>2024-03-05</td><td>LONG</td><td>+3.77%</td></tr>
-                  <tr><td>2024-07-22</td><td>SHORT</td><td>+3.45%</td></tr>
+                  {topWinningTrades.map((trade, index) => (
+                    <tr key={`${trade.date}-${index}`}>
+                      <td>{trade.date}</td>
+                      <td>{trade.side}</td>
+                      <td>{trade.return}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </article>
@@ -418,18 +610,21 @@ function BacktestPage({ onGoHome, onGoTrading, onGoHistory, onGoLogin }) {
               <h2>Top 5 Losing Trades</h2>
               <table>
                 <tbody>
-                  <tr><td>2024-08-07</td><td>LONG</td><td>-3.45%</td></tr>
-                  <tr><td>2024-06-18</td><td>LONG</td><td>-3.21%</td></tr>
-                  <tr><td>2024-09-03</td><td>SHORT</td><td>-2.98%</td></tr>
-                  <tr><td>2025-02-12</td><td>LONG</td><td>-2.72%</td></tr>
-                  <tr><td>2024-11-14</td><td>SHORT</td><td>-2.45%</td></tr>
+                  {topLosingTrades.map((trade, index) => (
+                    <tr key={`${trade.date}-${index}`}>
+                      <td>{trade.date}</td>
+                      <td>{trade.side}</td>
+                      <td>{trade.return}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </article>
           </section>
 
           <p className="backtest-warning">
-            Backtest results are based on historical data and do not guarantee future returns.
+            Backtest results are based on historical data and do not guarantee
+            future returns.
           </p>
         </section>
 
@@ -460,10 +655,22 @@ function BacktestPage({ onGoHome, onGoTrading, onGoHistory, onGoLogin }) {
             </div>
 
             <div className="asset-list">
-              <p><span>Initial Capital</span><strong>$7,137.00</strong></p>
-              <p><span>Withdrawable</span><strong>$6,324.50</strong></p>
-              <p><span>Used Margin</span><strong>$1,675.50</strong></p>
-              <p><span>Unrealized PnL</span><strong className="positive">+$863.00</strong></p>
+              <p>
+                <span>Initial Capital</span>
+                <strong>$7,137.00</strong>
+              </p>
+              <p>
+                <span>Withdrawable</span>
+                <strong>$6,324.50</strong>
+              </p>
+              <p>
+                <span>Used Margin</span>
+                <strong>$1,675.50</strong>
+              </p>
+              <p>
+                <span>Unrealized PnL</span>
+                <strong className="positive">+$863.00</strong>
+              </p>
             </div>
           </section>
 
@@ -477,12 +684,17 @@ function BacktestPage({ onGoHome, onGoTrading, onGoHistory, onGoLogin }) {
             </div>
 
             <div className="asset-composition-list">
-              <p><b className="green-dot" /> Cash <span>63.2%</span></p>
-              <p><b className="blue-dot" /> Positions <span>33.5%</span></p>
-              <p><b className="gray-dot" /> Others <span>3.3%</span></p>
+              <p>
+                <b className="green-dot" /> Cash <span>63.2%</span>
+              </p>
+              <p>
+                <b className="blue-dot" /> Positions <span>33.5%</span>
+              </p>
+              <p>
+                <b className="gray-dot" /> Others <span>3.3%</span>
+              </p>
             </div>
           </section>
-
         </aside>
       </main>
     </div>

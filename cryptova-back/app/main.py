@@ -2,8 +2,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
+
 from app.models.user import User
-from app.routers import auth
+from app.models.strategy_setting import StrategySetting
+from app.models.ai_signal import AISignal
+from app.models.backtest_result import BacktestResult
+
+from app.routers import auth, strategy, signals, backtest
 
 
 Base.metadata.create_all(bind=engine)
@@ -28,6 +33,9 @@ app.add_middleware(
 
 
 app.include_router(auth.router)
+app.include_router(strategy.router)
+app.include_router(signals.router)
+app.include_router(backtest.router)
 
 
 @app.get("/")

@@ -1,7 +1,44 @@
+import { useState } from "react";
 import "../styles/LoginPage.css";
 import logo from "../assets/logo.png";
+import { loginUser, saveAuthData } from "../api/authApi";
 
-function LoginPage({ onGoSignup }) {
+function LoginPage({ onGoSignup, onGoHome, onLoginSuccess }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setErrorMessage("");
+
+    if (!email.trim() || !password.trim()) {
+      setErrorMessage("Please enter your email and password.");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+
+      const data = await loginUser({
+        email,
+        password,
+      });
+
+      saveAuthData(data);
+
+      if (onLoginSuccess) {
+        onLoginSuccess(data.user);
+      }
+    } catch (error) {
+      setErrorMessage(error.message || "Login failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="login-page">
       <div className="background-glow glow-left" />
@@ -34,7 +71,7 @@ function LoginPage({ onGoSignup }) {
       </div>
 
       <main className="login-card">
-        <button className="close-button" aria-label="Close">
+        <button className="close-button" aria-label="Close" onClick={onGoHome}>
           ×
         </button>
 
@@ -47,17 +84,29 @@ function LoginPage({ onGoSignup }) {
           <p>Sign in to start trading</p>
         </section>
 
-        <form className="login-form">
+        <form className="login-form" onSubmit={handleLogin}>
           <label className="input-box">
             <span className="input-icon">✉</span>
-            <input type="email" placeholder="Email Address" />
+            <input
+              type="email"
+              placeholder="Email Address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
           </label>
 
           <label className="input-box">
             <span className="input-icon">🔒</span>
-            <input type="password" placeholder="Password" />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
             <span className="eye-icon">◉</span>
           </label>
+
+          {errorMessage && <p className="auth-error-message">{errorMessage}</p>}
 
           <div className="form-options">
             <label className="remember-area">
@@ -68,8 +117,8 @@ function LoginPage({ onGoSignup }) {
             <a href="#forgot">Forgot password?</a>
           </div>
 
-          <button type="button" className="login-button">
-            Sign In
+          <button type="submit" className="login-button" disabled={isLoading}>
+            {isLoading ? "Signing In..." : "Sign In"}
           </button>
         </form>
 

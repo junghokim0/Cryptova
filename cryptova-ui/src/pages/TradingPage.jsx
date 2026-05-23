@@ -1,13 +1,30 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "../styles/TradingPage.css";
 import logo from "../assets/logo.png";
+import {
+  getStrategySettings,
+  saveStrategySettings,
+} from "../api/strategyApi";
 
-function TradingPage({ onGoHome, onGoLogin, onGoHistory, onGoBacktest }) {
+function TradingPage({
+  user,
+  onGoHome,
+  onGoLogin,
+  onGoHistory,
+  onGoBacktest,
+  onLogout,
+}) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
   const [confidenceThreshold, setConfidenceThreshold] = useState(65);
   const [positionSize, setPositionSize] = useState(5);
   const [leverage, setLeverage] = useState(10);
   const [maxDrawdownStop, setMaxDrawdownStop] = useState(-10);
+
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [settingsMessage, setSettingsMessage] = useState("");
+  const [settingsError, setSettingsError] = useState("");
+
   const recentSignals = [
     {
       type: "LONG",
@@ -51,6 +68,59 @@ function TradingPage({ onGoHome, onGoLogin, onGoHistory, onGoBacktest }) {
     },
   ];
 
+  useEffect(() => {
+    async function loadSettings() {
+      if (!user) {
+        return;
+      }
+
+      try {
+        const data = await getStrategySettings();
+
+        setConfidenceThreshold(Number(data.confidence_threshold));
+        setPositionSize(Number(data.position_size));
+        setLeverage(Number(data.leverage));
+        setMaxDrawdownStop(Number(data.max_drawdown_stop));
+      } catch (error) {
+        setSettingsError(error.message || "Failed to load settings.");
+      }
+    }
+
+    loadSettings();
+  }, [user]);
+
+  const handleSaveSettings = async () => {
+    setSettingsMessage("");
+    setSettingsError("");
+
+    if (!user) {
+      setSettingsError("Please login before saving settings.");
+      return;
+    }
+
+    try {
+      setIsSavingSettings(true);
+
+      await saveStrategySettings({
+        exchange: "Bybit",
+        symbol: "BTCUSDT",
+        confidence_threshold: confidenceThreshold,
+        holding_strategy: "24h Fixed",
+        position_size: positionSize,
+        leverage,
+        max_drawdown_stop: maxDrawdownStop,
+        funding_threshold: 0.0001,
+        volatility_threshold: 0.015,
+      });
+
+      setSettingsMessage("Settings saved successfully.");
+    } catch (error) {
+      setSettingsError(error.message || "Failed to save settings.");
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
   return (
     <div className="trading-page">
       <div className="trading-bg-grid" />
@@ -64,18 +134,27 @@ function TradingPage({ onGoHome, onGoLogin, onGoHistory, onGoBacktest }) {
 
         <nav className="trading-nav-menu">
           <button className="trading-nav-link active">Trading</button>
+
           <button className="trading-nav-link" onClick={onGoHistory}>
             History
           </button>
+
           <button className="trading-nav-link" onClick={onGoBacktest}>
             Backtest
           </button>
         </nav>
 
-        <button type="button" className="trading-login-button" onClick={onGoLogin}>
-          <span>♙</span>
-          Login / Sign Up
-        </button>
+        {user ? (
+          <button type="button" className="trading-login-button" onClick={onLogout}>
+            <span>♙</span>
+            Logout
+          </button>
+        ) : (
+          <button type="button" className="trading-login-button" onClick={onGoLogin}>
+            <span>♙</span>
+            Login / Sign Up
+          </button>
+        )}
       </header>
 
       <main
@@ -98,101 +177,105 @@ function TradingPage({ onGoHome, onGoLogin, onGoHistory, onGoBacktest }) {
             <>
               <section className="exchange-card">
                 <label className="select-row">
-                    <div className="select-icon">⌂</div>
+                  <div className="select-icon">⌂</div>
 
-                    <div className="select-content">
+                  <div className="select-content">
                     <p>Exchange</p>
                     <select value="Bybit" onChange={() => {}}>
-                        <option value="Bybit">Bybit</option>
+                      <option value="Bybit">Bybit</option>
                     </select>
-                    </div>
+                  </div>
                 </label>
 
                 <div className="select-divider" />
 
                 <label className="select-row">
-                    <div className="select-icon">◉</div>
+                  <div className="select-icon">◉</div>
 
-                    <div className="select-content">
+                  <div className="select-content">
                     <p>Coin</p>
                     <select value="BTCUSDT" onChange={() => {}}>
-                        <option value="BTCUSDT">BTCUSDT</option>
+                      <option value="BTCUSDT">BTCUSDT</option>
                     </select>
-                    </div>
+                  </div>
                 </label>
-                </section>
+              </section>
 
               <section className="setting-card">
                 <h3>STRATEGY</h3>
 
                 <div className="setting-block">
-                    <div className="setting-label">
+                  <div className="setting-label">
                     <span>Confidence Threshold</span>
                     <button type="button">?</button>
-                    </div>
+                  </div>
 
-                    <div className="range-control">
+                  <div className="range-control">
                     <input
-                        type="range"
-                        min="50"
-                        max="90"
-                        step="1"
-                        value={confidenceThreshold}
-                        onChange={(e) => setConfidenceThreshold(Number(e.target.value))}
-                        style={{
-                        "--value": `${((confidenceThreshold - 50) / (90 - 50)) * 100}%`,
-                        }}
+                      type="range"
+                      min="50"
+                      max="90"
+                      step="1"
+                      value={confidenceThreshold}
+                      onChange={(e) =>
+                        setConfidenceThreshold(Number(e.target.value))
+                      }
+                      style={{
+                        "--value": `${
+                          ((confidenceThreshold - 50) / (90 - 50)) * 100
+                        }%`,
+                      }}
                     />
 
                     <div className="range-meta">
-                        <span>50%</span>
-                        <strong>{confidenceThreshold}%</strong>
-                        <span>90%</span>
+                      <span>50%</span>
+                      <strong>{confidenceThreshold}%</strong>
+                      <span>90%</span>
                     </div>
-                    </div>
+                  </div>
                 </div>
 
                 <div className="setting-block holding-block">
-                    <div className="setting-label">
+                  <div className="setting-label">
                     <span>Holding Strategy</span>
                     <button type="button">?</button>
-                    </div>
+                  </div>
 
-                    <label className="radio-row single">
-                    <input type="radio" defaultChecked name="holding" />
+                  <label className="radio-row single">
+                    <input type="radio" checked readOnly name="holding" />
                     <span>24h Fixed</span>
-                    </label>
+                  </label>
                 </div>
-                </section>
+              </section>
 
               <section className="setting-card">
                 <h3>RISK CONTROL</h3>
 
                 <div className="setting-block">
-                    <div className="setting-label">
+                  <div className="setting-label">
                     <span>Position Size</span>
                     <button type="button">?</button>
-                    </div>
+                  </div>
 
-                    <div className="range-control">
+                  <div className="range-control">
                     <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        step="1"
-                        value={positionSize}
-                        onChange={(e) => setPositionSize(Number(e.target.value))}
-                        style={{
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={positionSize}
+                      onChange={(e) => setPositionSize(Number(e.target.value))}
+                      style={{
                         "--value": `${positionSize}%`,
-                        }}
+                      }}
                     />
 
                     <div className="range-meta">
-                        <span>0%</span>
-                        <strong>{positionSize}%</strong>
-                        <span>100%</span>
+                      <span>0%</span>
+                      <strong>{positionSize}%</strong>
+                      <span>100%</span>
                     </div>
-                    </div>
+                  </div>
                 </div>
 
                 <div className="setting-block">
@@ -223,40 +306,61 @@ function TradingPage({ onGoHome, onGoLogin, onGoHistory, onGoBacktest }) {
                 </div>
 
                 <div className="setting-block">
-                    <div className="setting-label">
+                  <div className="setting-label">
                     <span>Max Drawdown Stop</span>
                     <button type="button">?</button>
-                    </div>
+                  </div>
 
-                    <div className="range-control">
+                  <div className="range-control">
                     <input
-                        type="range"
-                        min="-30"
-                        max="-5"
-                        step="1"
-                        value={maxDrawdownStop}
-                        onChange={(e) => setMaxDrawdownStop(Number(e.target.value))}
-                        style={{
-                        "--value": `${((maxDrawdownStop - -30) / (-5 - -30)) * 100}%`,
-                        }}
+                      type="range"
+                      min="-30"
+                      max="-5"
+                      step="1"
+                      value={maxDrawdownStop}
+                      onChange={(e) =>
+                        setMaxDrawdownStop(Number(e.target.value))
+                      }
+                      style={{
+                        "--value": `${
+                          ((maxDrawdownStop - -30) / (-5 - -30)) * 100
+                        }%`,
+                      }}
                     />
 
                     <div className="range-meta">
-                        <span>-30%</span>
-                        <strong>{maxDrawdownStop}%</strong>
-                        <span>-5%</span>
+                      <span>-30%</span>
+                      <strong>{maxDrawdownStop}%</strong>
+                      <span>-5%</span>
                     </div>
-                    </div>
+                  </div>
                 </div>
 
                 <button type="button" className="recommended-button">
-                    Use Recommended Settings
+                  Use Recommended Settings
                 </button>
 
-                <button type="button" className="start-trading-button">
-                    Start Auto Trading <span>↗</span>
+                <button
+                  type="button"
+                  className="save-settings-button"
+                  onClick={handleSaveSettings}
+                  disabled={isSavingSettings}
+                >
+                  {isSavingSettings ? "Saving..." : "Save Settings"}
                 </button>
-                </section>
+
+                {settingsMessage && (
+                  <p className="settings-success-message">{settingsMessage}</p>
+                )}
+
+                {settingsError && (
+                  <p className="settings-error-message">{settingsError}</p>
+                )}
+
+                <button type="button" className="start-trading-button">
+                  Start Auto Trading <span>↗</span>
+                </button>
+              </section>
             </>
           )}
         </aside>
@@ -319,6 +423,7 @@ function TradingPage({ onGoHome, onGoLogin, onGoHistory, onGoBacktest }) {
                 {Array.from({ length: 58 }).map((_, index) => {
                   const height = 18 + ((index * 17) % 54);
                   const x = 20 + index * 15;
+
                   return (
                     <rect
                       key={index}
@@ -365,21 +470,49 @@ function TradingPage({ onGoHome, onGoLogin, onGoHistory, onGoBacktest }) {
               ].map(([x, y, h, type], index) => (
                 <g key={index} className={`main-candle ${type}`}>
                   <line x1={x} y1={y - h / 2} x2={x} y2={y + h / 2} />
-                  <rect x={x - 7} y={y - h / 4} width="14" height={h / 2} rx="2" />
+                  <rect
+                    x={x - 7}
+                    y={y - h / 4}
+                    width="14"
+                    height={h / 2}
+                    rx="2"
+                  />
                 </g>
               ))}
 
               <g className="strategy-lines">
                 <line x1="0" y1="120" x2="900" y2="120" className="line-red" />
-                <line x1="0" y1="185" x2="900" y2="185" className="line-orange" />
-                <line x1="0" y1="255" x2="900" y2="255" className="line-green" />
+                <line
+                  x1="0"
+                  y1="185"
+                  x2="900"
+                  y2="185"
+                  className="line-orange"
+                />
+                <line
+                  x1="0"
+                  y1="255"
+                  x2="900"
+                  y2="255"
+                  className="line-green"
+                />
                 <line x1="0" y1="315" x2="900" y2="315" className="line-blue" />
-                <line x1="0" y1="375" x2="900" y2="375" className="line-darkblue" />
+                <line
+                  x1="0"
+                  y1="375"
+                  x2="900"
+                  y2="375"
+                  className="line-darkblue"
+                />
               </g>
             </svg>
 
-            <div className="chart-tag red-tag">Max. Drawdown Stop <b>-10%</b></div>
-            <div className="chart-tag orange-tag">Max. Position Size <b>5%</b></div>
+            <div className="chart-tag red-tag">
+              Max. Drawdown Stop <b>{maxDrawdownStop}%</b>
+            </div>
+            <div className="chart-tag orange-tag">
+              Max. Position Size <b>{positionSize}%</b>
+            </div>
             <div className="chart-tag green-tag">Take Profit 2</div>
             <div className="chart-tag blue-tag">Take Profit 1</div>
             <div className="chart-tag navy-tag">Entry Price</div>
@@ -425,7 +558,10 @@ function TradingPage({ onGoHome, onGoLogin, onGoHistory, onGoBacktest }) {
               <h3>Recent Signals</h3>
 
               {recentSignals.map((signal) => (
-                <div className="recent-signal-item" key={`${signal.pair}-${signal.time}`}>
+                <div
+                  className="recent-signal-item"
+                  key={`${signal.pair}-${signal.time}`}
+                >
                   <span className={`signal-dot ${signal.direction}`}>
                     {signal.direction === "up" ? "↑" : "↓"}
                   </span>
@@ -449,18 +585,18 @@ function TradingPage({ onGoHome, onGoLogin, onGoHistory, onGoBacktest }) {
 
           <section className="explanation-box">
             <div className="explanation-title">
-                <div className="explanation-icon chat-icon">
+              <div className="explanation-icon chat-icon">
                 <span />
-                </div>
+              </div>
 
-                <h3>AI Trade Explanation</h3>
+              <h3>AI Trade Explanation</h3>
             </div>
 
             <p>
-                AI analyzes each Long/Short position entry reason and explains
-                the current market context.
+              AI analyzes each Long/Short position entry reason and explains the
+              current market context.
             </p>
-            </section>
+          </section>
         </aside>
       </main>
     </div>
