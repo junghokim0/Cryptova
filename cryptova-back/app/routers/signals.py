@@ -1,4 +1,6 @@
 import random
+import os
+import httpx
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -23,21 +25,23 @@ def create_mock_signal(
     entry_price = round(random.uniform(62000, 69000), 2)
 
     if signal_type == "LONG":
-        status = random.choice(["HOLDING", "CLOSED"])
+        signal_status = random.choice(["HOLDING", "CLOSED"])
         result = random.choice([None, "+2.15%", "+3.42%", "-1.20%"])
         reason_summary = "AI detected a potential upward market direction based on chart momentum and positive market context."
         news_summary = "Recent market news shows relatively positive sentiment for BTC."
         chart_summary = "Price action remains above key support zones with short-term bullish structure."
         filter_summary = "Confidence threshold passed. Default funding and volatility risk filter did not block this LONG signal."
+
     elif signal_type == "SHORT":
-        status = random.choice(["CLOSED", "STOPPED"])
+        signal_status = random.choice(["CLOSED", "STOPPED"])
         result = random.choice(["+1.83%", "+2.31%", "-1.82%"])
         reason_summary = "AI detected a potential downside move based on weak chart structure and risk-off market context."
         news_summary = "Recent market news contains mixed or negative sentiment."
         chart_summary = "Short-term price action shows weakness near resistance zones."
         filter_summary = "Confidence threshold passed. Signal was accepted after risk filter review."
+
     else:
-        status = "CLOSED"
+        signal_status = "CLOSED"
         result = None
         reason_summary = "AI classified the current market condition as uncertain and avoided active entry."
         news_summary = "News sentiment is mixed and does not strongly support directional entry."
@@ -50,8 +54,100 @@ def create_mock_signal(
         signal=signal_type,
         confidence=confidence,
         entry_price=entry_price,
-        status=status,
+        status=signal_status,
         result=result,
+        reason_summary=reason_summary,
+        news_summary=news_summary,
+        chart_summary=chart_summary,
+        filter_summary=filter_summary,
+    )
+
+    db.add(signal)
+    db.commit()
+    db.refresh(signal)
+
+    return signal
+
+
+@router.post("/generate", response_model=AISignalResponse)
+def generate_signal_from_ai_server(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ai_server_url = os.getenv("AI_SERVER_URL", "http://127.0.0.1:8001")
+
+    try:
+        response = httpx.post(
+            f"{ai_server_url}/predict/mock",
+            json={"symbol": "BTCUSDT"},
+            timeout=10.0,
+        )
+        response.raise_for_status()
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI Server request failed: {str(e)}",
+        )
+
+    ai_result = response.json()
+
+    raw_signal = ai_result.get("signal", "HOLD")
+
+    if raw_signal == "BUY":
+        signal_type = "LONG"
+    elif raw_signal == "SELL":
+        signal_type = "SHORT"
+    else:
+        signal_type = raw_signal
+
+    raw_confidence = ai_result.get("confidence", 0)
+
+    if raw_confidence <= 1:
+        confidence = int(raw_confidence * 100)
+    else:
+        confidence = int(raw_confidence)
+
+    entry_price = ai_result.get("price", 0)
+
+    if signal_type == "LONG":
+        signal_status = "HOLDING"
+        reason_summary = ai_result.get(
+            "reason",
+            "AI Server generated a LONG signal.",
+        )
+        news_summary = "News summary is not connected yet."
+        chart_summary = "Chart summary is not connected yet."
+        filter_summary = "Risk filter is not connected yet."
+
+    elif signal_type == "SHORT":
+        signal_status = "HOLDING"
+        reason_summary = ai_result.get(
+            "reason",
+            "AI Server generated a SHORT signal.",
+        )
+        news_summary = "News summary is not connected yet."
+        chart_summary = "Chart summary is not connected yet."
+        filter_summary = "Risk filter is not connected yet."
+
+    else:
+        signal_status = "CLOSED"
+        reason_summary = ai_result.get(
+            "reason",
+            "AI Server generated a HOLD signal.",
+        )
+        news_summary = "News summary is not connected yet."
+        chart_summary = "Chart summary is not connected yet."
+        filter_summary = "Signal was classified as HOLD."
+
+    signal = AISignal(
+        user_id=current_user.id,
+        symbol=ai_result.get("symbol", "BTCUSDT"),
+        signal=signal_type,
+        confidence=confidence,
+        entry_price=entry_price,
+        status=signal_status,
+        result=None,
         reason_summary=reason_summary,
         news_summary=news_summary,
         chart_summary=chart_summary,

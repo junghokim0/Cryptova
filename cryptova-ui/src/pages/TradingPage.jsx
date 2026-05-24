@@ -5,6 +5,7 @@ import {
   getStrategySettings,
   saveStrategySettings,
 } from "../api/strategyApi";
+import { generateSignal, getSignals } from "../api/signalApi";
 
 function TradingPage({
   user,
@@ -24,6 +25,10 @@ function TradingPage({
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState("");
   const [settingsError, setSettingsError] = useState("");
+  const [isStartingTrading, setIsStartingTrading] = useState(false);
+  const [tradingMessage, setTradingMessage] = useState("");
+  const [tradingError, setTradingError] = useState("");
+  const [latestSignal, setLatestSignal] = useState(null);
 
   const recentSignals = [
     {
@@ -69,26 +74,32 @@ function TradingPage({
   ];
 
   useEffect(() => {
-    async function loadSettings() {
-      if (!user) {
-        return;
-      }
-
-      try {
-        const data = await getStrategySettings();
-
-        setConfidenceThreshold(Number(data.confidence_threshold));
-        setPositionSize(Number(data.position_size));
-        setLeverage(Number(data.leverage));
-        setMaxDrawdownStop(Number(data.max_drawdown_stop));
-      } catch (error) {
-        setSettingsError(error.message || "Failed to load settings.");
-      }
+  async function loadSettings() {
+    if (!user) {
+      return;
     }
 
-    loadSettings();
-  }, [user]);
+    try {
+      const data = await getStrategySettings();
 
+      setConfidenceThreshold(Number(data.confidence_threshold));
+      setPositionSize(Number(data.position_size));
+      setLeverage(Number(data.leverage));
+      setMaxDrawdownStop(Number(data.max_drawdown_stop));
+    } catch (error) {
+      setSettingsError(error.message || "Failed to load settings.");
+          }
+        }
+
+        loadSettings();
+      }, [user]);
+
+      useEffect(() => {
+        loadLatestSignal();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [user]);
+
+ 
   const handleSaveSettings = async () => {
     setSettingsMessage("");
     setSettingsError("");
@@ -113,6 +124,13 @@ function TradingPage({
         volatility_threshold: 0.015,
       });
 
+      const updatedSettings = await getStrategySettings();
+
+      setConfidenceThreshold(Number(updatedSettings.confidence_threshold));
+      setPositionSize(Number(updatedSettings.position_size));
+      setLeverage(Number(updatedSettings.leverage));
+      setMaxDrawdownStop(Number(updatedSettings.max_drawdown_stop));
+
       setSettingsMessage("Settings saved successfully.");
     } catch (error) {
       setSettingsError(error.message || "Failed to save settings.");
@@ -121,6 +139,45 @@ function TradingPage({
     }
   };
 
+  const loadLatestSignal = async () => {
+    if (!user) return;
+
+    try {
+      const data = await getSignals();
+
+      if (data.length > 0) {
+        setLatestSignal(data[0]);
+      }
+    } catch (error) {
+      console.error("Failed to load latest signal:", error);
+    }
+  };
+
+  const handleStartAutoTrading = async () => {
+  setTradingMessage("");
+  setTradingError("");
+
+  if (!user) {
+    setTradingError("Please login before starting auto trading.");
+    return;
+  }
+
+  try {
+    setIsStartingTrading(true);
+
+    const signal = await generateSignal();
+
+    setLatestSignal(signal);
+
+      setTradingMessage(
+        `AI Signal generated: ${signal.signal} / Confidence ${signal.confidence}%`
+      );
+    } catch (error) {
+      setTradingError(error.message || "Failed to start auto trading.");
+    } finally {
+      setIsStartingTrading(false);
+    }
+  };
   return (
     <div className="trading-page">
       <div className="trading-bg-grid" />
@@ -357,9 +414,21 @@ function TradingPage({
                   <p className="settings-error-message">{settingsError}</p>
                 )}
 
-                <button type="button" className="start-trading-button">
-                  Start Auto Trading <span>↗</span>
+                <button
+                  type="button"
+                  className="start-trading-button"
+                  onClick={handleStartAutoTrading}
+                  disabled={isStartingTrading}
+                >
+                  {isStartingTrading ? "Starting..." : "Start Auto Trading"} <span>↗</span>
                 </button>
+                                  {tradingMessage && (
+                    <p className="settings-success-message">{tradingMessage}</p>
+                  )}
+
+                  {tradingError && (
+                    <p className="settings-error-message">{tradingError}</p>
+                  )}
               </section>
             </>
           )}
@@ -546,11 +615,29 @@ function TradingPage({
           <section className="ai-signal-box">
             <h2>AI Signal</h2>
 
-            <div className="trading-gauge">
+              <div
+                  className={`trading-gauge ${
+                    latestSignal?.signal === "LONG"
+                      ? "gauge-long"
+                      : latestSignal?.signal === "SHORT"
+                      ? "gauge-short"
+                      : "gauge-hold"
+                  }`}
+                >
               <div className="trading-gauge-inner">
-                <strong>LONG</strong>
+                <strong
+                  className={
+                    latestSignal?.signal === "LONG"
+                      ? "signal-long"
+                      : latestSignal?.signal === "SHORT"
+                      ? "signal-short"
+                      : "signal-hold"
+                  }
+                >
+                  {latestSignal ? latestSignal.signal : "NO SIGNAL"}
+                </strong>
                 <span>Confidence</span>
-                <b>87%</b>
+                <b>{latestSignal ? `${latestSignal.confidence}%` : "--"}</b>
               </div>
             </div>
 

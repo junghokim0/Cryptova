@@ -72,3 +72,25 @@ export async function getSignalDetail(signalId) {
 
   return data;
 }
+export async function generateSignal() {
+  const token = getAuthToken();
+
+  if (!token) {
+    throw new Error("Login is required.");
+  }
+
+  const response = await fetch(`${API_BASE_URL}/signals/generate`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.detail || "Failed to generate signal.");
+  }
+
+  return data;
+}

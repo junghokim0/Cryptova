@@ -9,7 +9,8 @@ from app.models.ai_signal import AISignal
 from app.models.backtest_result import BacktestResult
 
 from app.routers import auth, strategy, signals, backtest
-
+from app.models.api_key import ApiKey
+from app.routers import exchange
 
 Base.metadata.create_all(bind=engine)
 
@@ -36,7 +37,7 @@ app.include_router(auth.router)
 app.include_router(strategy.router)
 app.include_router(signals.router)
 app.include_router(backtest.router)
-
+app.include_router(exchange.router)
 
 @app.get("/")
 def root():

@@ -724,6 +724,39 @@
   place-items: center;
 }
 
+.gauge-long {
+  background: conic-gradient(
+    #4ade80 0deg 282deg,
+    #1e3a8a 282deg 360deg
+  );
+}
+
+.gauge-short {
+  background: conic-gradient(
+    #ef4444 0deg 282deg,
+    #1e3a8a 282deg 360deg
+  );
+}
+
+.gauge-hold {
+  background: conic-gradient(
+    #facc15 0deg 282deg,
+    #1e3a8a 282deg 360deg
+  );
+}
+
+.signal-long {
+  color: #4ade80;
+}
+
+.signal-short {
+  color: #ef4444;
+}
+
+.signal-hold {
+  color: #facc15;
+}
+
 .trading-gauge-inner {
   width: 118px;
   height: 118px;
@@ -736,7 +769,6 @@
 }
 
 .trading-gauge-inner strong {
-  color: #4ade80;
   font-size: 27px;
   font-style: italic;
 }
@@ -978,5 +1010,4 @@
   color: #fecaca;
   font-size: 13px;
   font-weight: 700;
-}
 }

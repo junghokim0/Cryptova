@@ -1,3 +1,4 @@
+import { getExchangeBalance } from "../api/exchangeApi";
 import { useEffect, useMemo, useState } from "react";
 import "../styles/BacktestPage.css";
 import logo from "../assets/logo.png";
@@ -95,6 +96,9 @@ function BacktestPage({
   onGoLogin,
   onLogout,
 }) {
+  const [assetBalance, setAssetBalance] = useState(null);
+  const [assetLoading, setAssetLoading] = useState(false);
+  const [assetError, setAssetError] = useState("");
   const [settings, setSettings] = useState(initialSettings);
   const [isAssetOpen, setIsAssetOpen] = useState(true);
 
@@ -187,6 +191,24 @@ function BacktestPage({
     }
   };
 
+  const loadExchangeBalance = async () => {
+  if (!user) {
+    setAssetError("Please login to load asset data.");
+    return;
+  }
+
+  try {
+    setAssetLoading(true);
+    setAssetError("");
+
+    const data = await getExchangeBalance();
+    setAssetBalance(data);
+  } catch (error) {
+    setAssetError(error.message || "Failed to load asset data.");
+  } finally {
+    setAssetLoading(false);
+  }
+    };
   return (
     <div className="backtest-page">
       <div className="backtest-bg-grid" />
@@ -211,7 +233,10 @@ function BacktestPage({
         <button
           type="button"
           className="asset-button"
-          onClick={() => setIsAssetOpen((prev) => !prev)}
+          onClick={() => {
+            setIsAssetOpen((prev) => !prev);
+            loadExchangeBalance();
+          }}
         >
           <span className="asset-icon">▣</span>
           <div>
@@ -640,39 +665,64 @@ function BacktestPage({
           <h2>Asset</h2>
 
           <section className="asset-summary-card">
-            <h3>Total Asset Summary</h3>
-            <div className="asset-big-card">
-              <p>Total Asset</p>
-              <strong>$10,000.00</strong>
-              <div>
-                <span>Daily PnL</span>
-                <b>+$242.35</b>
-              </div>
-              <div>
-                <span>Total Return</span>
-                <b>+$2,863.00</b>
-              </div>
-            </div>
+          <h3>Total Asset Summary</h3>
 
-            <div className="asset-list">
-              <p>
-                <span>Initial Capital</span>
-                <strong>$7,137.00</strong>
-              </p>
-              <p>
-                <span>Withdrawable</span>
-                <strong>$6,324.50</strong>
-              </p>
-              <p>
-                <span>Used Margin</span>
-                <strong>$1,675.50</strong>
-              </p>
-              <p>
-                <span>Unrealized PnL</span>
-                <strong className="positive">+$863.00</strong>
-              </p>
-            </div>
-          </section>
+          {assetLoading ? (
+            <p>Loading asset data...</p>
+          ) : assetError ? (
+            <p className="asset-error">{assetError}</p>
+          ) : assetBalance ? (
+            <>
+              <div className="asset-big-card">
+                <p>Wallet Balance</p>
+                <strong>
+                  ${Number(assetBalance.wallet_balance).toLocaleString()}
+                </strong>
+                <div>
+                  <span>Coin</span>
+                  <b>{assetBalance.coin}</b>
+                </div>
+                <div>
+                  <span>Testnet</span>
+                  <b>{assetBalance.is_testnet ? "True" : "False"}</b>
+                </div>
+              </div>
+
+              <div className="asset-list">
+                <p>
+                  <span>Available Balance</span>
+                  <strong>
+                    ${Number(assetBalance.available_balance).toLocaleString()}
+                  </strong>
+                </p>
+                <p>
+                  <span>Used Margin</span>
+                  <strong>
+                    ${Number(assetBalance.used_margin).toLocaleString()}
+                  </strong>
+                </p>
+                <p>
+                  <span>Unrealized PnL</span>
+                  <strong
+                    className={
+                      Number(assetBalance.unrealized_pnl) >= 0
+                        ? "positive"
+                        : "negative"
+                    }
+                  >
+                    ${Number(assetBalance.unrealized_pnl).toLocaleString()}
+                  </strong>
+                </p>
+                <p>
+                  <span>Exchange</span>
+                  <strong>{assetBalance.exchange}</strong>
+                </p>
+              </div>
+            </>
+          ) : (
+            <p>Click Total Asset to load balance.</p>
+          )}
+        </section>
 
           <section className="asset-composition-card">
             <h3>Asset Composition</h3>
