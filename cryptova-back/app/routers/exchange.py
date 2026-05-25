@@ -11,6 +11,8 @@ from app.schemas.exchange_schema import (
     ApiKeySaveResponse,
     ApiKeyStatusResponse,
     ExchangeBalanceResponse,
+    ExchangePositionResponse,
+    OrderQuantityPreviewResponse,
 )
 from app.services.encryption_service import EncryptionService
 from app.services.bybit_service import BybitService
@@ -163,4 +165,105 @@ def get_exchange_balance(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Failed to fetch Bybit balance: {str(e)}",
+        )
+    
+
+@router.get("/position", response_model=ExchangePositionResponse)
+def get_exchange_position(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    api_key_record = (
+        db.query(ApiKey)
+        .filter(ApiKey.user_id == current_user.id)
+        .filter(ApiKey.exchange == "bybit")
+        .first()
+    )
+
+    if not api_key_record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bybit API key is not registered.",
+        )
+
+    try:
+        api_key = encryption_service.decrypt(api_key_record.api_key_encrypted)
+        api_secret = encryption_service.decrypt(api_key_record.api_secret_encrypted)
+
+        bybit_service = BybitService(
+            api_key=api_key,
+            api_secret=api_secret,
+            is_testnet=api_key_record.is_testnet,
+        )
+
+        position = bybit_service.get_position(symbol="BTCUSDT")
+
+        return {
+            "exchange": api_key_record.exchange,
+            "is_testnet": api_key_record.is_testnet,
+            **position,
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to fetch Bybit position: {str(e)}",
+        )
+    
+@router.get("/order-quantity-preview", response_model=OrderQuantityPreviewResponse)
+def get_order_quantity_preview(
+    symbol: str = "BTCUSDT",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    api_key_record = (
+        db.query(ApiKey)
+        .filter(ApiKey.user_id == current_user.id)
+        .filter(ApiKey.exchange == "bybit")
+        .first()
+    )
+
+    if not api_key_record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bybit API key is not registered.",
+        )
+
+    try:
+        api_key = encryption_service.decrypt(api_key_record.api_key_encrypted)
+        api_secret = encryption_service.decrypt(api_key_record.api_secret_encrypted)
+
+        bybit_service = BybitService(
+            api_key=api_key,
+            api_secret=api_secret,
+            is_testnet=api_key_record.is_testnet,
+        )
+
+        balance_data = bybit_service.get_usdt_balance()
+        position_data = bybit_service.get_position(symbol=symbol)
+        current_price = bybit_service.get_ticker_price(symbol=symbol)
+
+        balance = float(balance_data["available_balance"])
+        leverage = float(position_data["leverage"] or 1)
+
+        # 일단 기본값: 잔고의 10%
+        # 이후 Strategy Settings의 position_size와 leverage로 연결하면 됨
+        position_size = 0.10
+
+        qty_data = bybit_service.calculate_order_quantity(
+            balance=balance,
+            position_size=position_size,
+            leverage=leverage,
+            current_price=current_price,
+        )
+
+        return {
+            "symbol": symbol,
+            **qty_data,
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to calculate order quantity: {str(e)}",
         )

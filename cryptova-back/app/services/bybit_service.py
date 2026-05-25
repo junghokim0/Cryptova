@@ -54,3 +54,91 @@ class BybitService:
             "used_margin": used_margin,
             "coin": "USDT",
         }
+    def get_position(self, symbol: str = "BTCUSDT"):
+        response = self.session.get_positions(
+            category="linear",
+            symbol=symbol,
+        )
+
+        if response.get("retCode") != 0:
+            raise Exception(response.get("retMsg", "Failed to fetch Bybit position."))
+
+        positions = response.get("result", {}).get("list", [])
+
+        if not positions:
+            return {
+                "symbol": symbol,
+                "side": "None",
+                "size": 0.0,
+                "entry_price": 0.0,
+                "leverage": 0.0,
+                "unrealised_pnl": 0.0,
+            }
+
+        pos = positions[0]
+
+        size = float(pos.get("size") or 0)
+
+        if size == 0:
+            side = "None"
+        else:
+            side = pos.get("side") or "None"
+
+        return {
+            "symbol": pos.get("symbol", symbol),
+            "side": side,
+            "size": size,
+            "entry_price": float(pos.get("avgPrice") or 0),
+            "leverage": float(pos.get("leverage") or 0),
+            "unrealised_pnl": float(pos.get("unrealisedPnl") or 0),
+        }
+    def get_ticker_price(self, symbol: str = "BTCUSDT") -> float:
+        response = self.session.get_tickers(
+            category="linear",
+            symbol=symbol,
+        )
+
+        if response.get("retCode") != 0:
+            raise Exception(response.get("retMsg", "Failed to fetch ticker price."))
+
+        ticker_list = response.get("result", {}).get("list", [])
+
+        if not ticker_list:
+            raise Exception("Ticker price not found.")
+
+        return float(ticker_list[0].get("lastPrice") or 0)
+
+
+    def calculate_order_quantity(
+        self,
+        balance: float,
+        position_size: float,
+        leverage: float,
+        current_price: float,
+    ) -> dict:
+        if balance <= 0:
+            raise Exception("Balance must be greater than 0.")
+
+        if position_size <= 0:
+            raise Exception("Position size must be greater than 0.")
+
+        if leverage <= 0:
+            raise Exception("Leverage must be greater than 0.")
+
+        if current_price <= 0:
+            raise Exception("Current price must be greater than 0.")
+
+        order_value = balance * position_size * leverage
+        qty = order_value / current_price
+
+        # Bybit BTCUSDT qty precision을 고려해서 우선 3자리 반올림
+        qty = round(qty, 3)
+
+        return {
+            "balance": float(balance),
+            "position_size": float(position_size),
+            "leverage": float(leverage),
+            "current_price": float(current_price),
+            "order_value": float(order_value),
+            "qty": float(qty),
+        }

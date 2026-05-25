@@ -16,7 +16,7 @@ class StrategySetting(Base):
     exchange = Column(String(50), default="Bybit", nullable=False)
     symbol = Column(String(50), default="BTCUSDT", nullable=False)
 
-    confidence_threshold = Column(Float, default=65.0, nullable=False)
+    confidence_threshold = Column(Float, default=46.0, nullable=False)
     holding_strategy = Column(String(50), default="24h Fixed", nullable=False)
 
     position_size = Column(Float, default=5.0, nullable=False)

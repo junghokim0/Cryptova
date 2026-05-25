@@ -5,3 +5,25 @@ node_modules/
 dist/
 build/
 .env
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Environment
+.env
+
+# API keys
+api_key.txt
+apikey pass.txt
+
+# AI models
+models/
+chart_only/
+
+# Dataset
+data/
+
+# Mac / Windows
+.DS_Store
+Thumbs.db

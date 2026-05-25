@@ -17,7 +17,7 @@ function TradingPage({
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  const [confidenceThreshold, setConfidenceThreshold] = useState(65);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(46);
   const [positionSize, setPositionSize] = useState(5);
   const [leverage, setLeverage] = useState(10);
   const [maxDrawdownStop, setMaxDrawdownStop] = useState(-10);
@@ -29,49 +29,8 @@ function TradingPage({
   const [tradingMessage, setTradingMessage] = useState("");
   const [tradingError, setTradingError] = useState("");
   const [latestSignal, setLatestSignal] = useState(null);
+  const [signals, setSignals] = useState([]);
 
-  const recentSignals = [
-    {
-      type: "LONG",
-      pair: "BTCUSDT",
-      confidence: "87%",
-      time: "1 min ago",
-      price: "67,842.31",
-      direction: "up",
-    },
-    {
-      type: "SHORT",
-      pair: "ETHUSDT",
-      confidence: "75%",
-      time: "15 min ago",
-      price: "3,712.45",
-      direction: "down",
-    },
-    {
-      type: "LONG",
-      pair: "SOLUSDT",
-      confidence: "82%",
-      time: "1 hour ago",
-      price: "164.23",
-      direction: "up",
-    },
-    {
-      type: "SHORT",
-      pair: "AVAXUSDT",
-      confidence: "78%",
-      time: "2 hours ago",
-      price: "25.68",
-      direction: "down",
-    },
-    {
-      type: "LONG",
-      pair: "LINKUSDT",
-      confidence: "80%",
-      time: "3 hours ago",
-      price: "18.94",
-      direction: "up",
-    },
-  ];
 
   useEffect(() => {
   async function loadSettings() {
@@ -145,6 +104,8 @@ function TradingPage({
     try {
       const data = await getSignals();
 
+      setSignals(data);
+
       if (data.length > 0) {
         setLatestSignal(data[0]);
       }
@@ -168,6 +129,7 @@ function TradingPage({
     const signal = await generateSignal();
 
     setLatestSignal(signal);
+    await loadLatestSignal();
 
       setTradingMessage(
         `AI Signal generated: ${signal.signal} / Confidence ${signal.confidence}%`
@@ -270,7 +232,7 @@ function TradingPage({
                   <div className="range-control">
                     <input
                       type="range"
-                      min="50"
+                      min="30"
                       max="90"
                       step="1"
                       value={confidenceThreshold}
@@ -279,13 +241,13 @@ function TradingPage({
                       }
                       style={{
                         "--value": `${
-                          ((confidenceThreshold - 50) / (90 - 50)) * 100
+                          ((confidenceThreshold - 30) / (90 - 30)) * 100
                         }%`,
                       }}
                     />
 
                     <div className="range-meta">
-                      <span>50%</span>
+                      <span>30%</span>
                       <strong>{confidenceThreshold}%</strong>
                       <span>90%</span>
                     </div>
@@ -644,26 +606,39 @@ function TradingPage({
             <div className="recent-signal-list">
               <h3>Recent Signals</h3>
 
-              {recentSignals.map((signal) => (
-                <div
-                  className="recent-signal-item"
-                  key={`${signal.pair}-${signal.time}`}
-                >
-                  <span className={`signal-dot ${signal.direction}`}>
-                    {signal.direction === "up" ? "↑" : "↓"}
+              {signals.slice(0, 5).map((signal) => (
+                <div className="recent-signal-item" key={signal.id}>
+                  <span
+                    className={`signal-dot ${
+                      signal.signal === "LONG"
+                        ? "up"
+                        : signal.signal === "SHORT"
+                        ? "down"
+                        : "hold"
+                    }`}
+                  >
+                    {signal.signal === "LONG" ? "↑" : signal.signal === "SHORT" ? "↓" : "–"}
                   </span>
 
                   <div>
-                    <strong className={signal.type === "LONG" ? "long" : "short"}>
-                      {signal.type}
+                    <strong
+                      className={
+                        signal.signal === "LONG"
+                          ? "long"
+                          : signal.signal === "SHORT"
+                          ? "short"
+                          : "hold"
+                      }
+                    >
+                      {signal.signal}
                     </strong>
-                    <p>{signal.pair}</p>
-                    <small>{signal.confidence}</small>
+                    <p>{signal.symbol}</p>
+                    <small>{signal.confidence}%</small>
                   </div>
 
                   <div className="signal-right">
-                    <span>{signal.time}</span>
-                    <b>{signal.price}</b>
+                    <span>{new Date(signal.created_at).toLocaleString()}</span>
+                    <b>{signal.status}</b>
                   </div>
                 </div>
               ))}

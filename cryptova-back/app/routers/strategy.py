@@ -19,7 +19,7 @@ def create_default_strategy_setting(db: Session, user_id: int) -> StrategySettin
         user_id=user_id,
         exchange="Bybit",
         symbol="BTCUSDT",
-        confidence_threshold=65.0,
+        confidence_threshold=46.0,
         holding_strategy="24h Fixed",
         position_size=5.0,
         leverage=10,
