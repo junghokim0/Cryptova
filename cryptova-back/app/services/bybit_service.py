@@ -43,7 +43,15 @@ class BybitService:
             }
 
         wallet_balance = float(usdt.get("walletBalance") or 0)
-        available_balance = float(usdt.get("availableToWithdraw") or 0)
+
+        account_available = float(account.get("totalAvailableBalance") or 0)
+        coin_available = float(usdt.get("availableToWithdraw") or 0)
+
+        available_balance = account_available if account_available > 0 else coin_available
+
+        if available_balance <= 0 and wallet_balance > 0:
+            available_balance = wallet_balance
+
         unrealized_pnl = float(usdt.get("unrealisedPnl") or 0)
         used_margin = max(wallet_balance - available_balance, 0)
 
@@ -141,4 +149,74 @@ class BybitService:
             "current_price": float(current_price),
             "order_value": float(order_value),
             "qty": float(qty),
+        }
+    def place_market_order(
+        self,
+        symbol: str,
+        side: str,
+        qty: float,
+        reduce_only: bool = False,
+    ) -> dict:
+        """
+        side: "Buy" 또는 "Sell"
+        reduce_only: 청산 주문이면 True, 신규 진입이면 False
+        """
+
+        if side not in ["Buy", "Sell"]:
+            raise Exception("side must be Buy or Sell.")
+
+        if qty <= 0:
+            raise Exception("qty must be greater than 0.")
+
+        response = self.session.place_order(
+            category="linear",
+            symbol=symbol,
+            side=side,
+            orderType="Market",
+            qty=str(qty),
+            reduceOnly=reduce_only,
+        )
+
+        if response.get("retCode") != 0:
+            raise Exception(response.get("retMsg", "Failed to place Bybit order."))
+
+        result = response.get("result", {})
+
+        return {
+            "order_id": result.get("orderId"),
+            "order_link_id": result.get("orderLinkId"),
+            "symbol": symbol,
+            "side": side,
+            "qty": qty,
+            "reduce_only": reduce_only,
+            "raw_response": response,
+        }
+
+    def close_position_market(self, symbol: str = "BTCUSDT") -> dict:
+        position = self.get_position(symbol=symbol)
+
+        size = float(position.get("size") or 0)
+        side = position.get("side")
+
+        if size <= 0 or side == "None":
+            return {
+                "closed": False,
+                "message": "No open position to close.",
+                "symbol": symbol,
+                "size": 0.0,
+            }
+
+        close_side = "Sell" if side == "Buy" else "Buy"
+
+        order_result = self.place_market_order(
+            symbol=symbol,
+            side=close_side,
+            qty=size,
+            reduce_only=True,
+        )
+
+        return {
+            "closed": True,
+            "message": "Position close order submitted.",
+            **order_result,
         }

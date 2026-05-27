@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 import os
 import numpy as np
+import time
 
 from feature_loader import load_latest_chart_window
 from inference import predict_signal, predict_latest_signal
@@ -158,21 +159,46 @@ from fastapi import HTTPException
 
 @app.post("/predict/latest")
 def predict_latest():
+    total_start = time.perf_counter()
+
     try:
-        run_script(PROJECT_ROOT / "data/chart/raw/fetch_latest_chart.py")
-        run_script(PROJECT_ROOT / "data/chart/processed/preprocess_latest_chart.py")
-        run_script(PROJECT_ROOT / "data/news/raw/fetch_latest_news.py")
-        run_script(PROJECT_ROOT / "data/news/processed/preprocess_latest_news.py")
-        run_script(PROJECT_ROOT / "data/merged/merge_latest_chart_news.py")
+        steps = [
+            ("fetch_latest_chart", PROJECT_ROOT / "data/chart/raw/fetch_latest_chart.py"),
+            ("preprocess_latest_chart", PROJECT_ROOT / "data/chart/processed/preprocess_latest_chart.py"),
+            ("fetch_latest_news", PROJECT_ROOT / "data/news/raw/fetch_latest_news.py"),
+            ("preprocess_latest_news", PROJECT_ROOT / "data/news/processed/preprocess_latest_news.py"),
+            ("merge_latest_chart_news", PROJECT_ROOT / "data/merged/merge_latest_chart_news.py"),
+        ]
+
+        for step_name, script_path in steps:
+            step_start = time.perf_counter()
+            print(f"\n[START] {step_name}", flush=True)
+
+            stdout = run_script(script_path)
+
+            elapsed = time.perf_counter() - step_start
+            print(f"[DONE] {step_name} - {elapsed:.2f}s", flush=True)
+
+            if stdout:
+                print(f"[STDOUT] {step_name}\n{stdout[-1000:]}", flush=True)
+
+        infer_start = time.perf_counter()
+        print("\n[START] predict_latest_signal", flush=True)
 
         result = predict_latest_signal()
+
+        infer_elapsed = time.perf_counter() - infer_start
+        total_elapsed = time.perf_counter() - total_start
+
+        print(f"[DONE] predict_latest_signal - {infer_elapsed:.2f}s", flush=True)
+        print(f"[TOTAL] predict_latest - {total_elapsed:.2f}s", flush=True)
 
         return {
             "symbol": "BTCUSDT",
             "signal": result["signal"],
             "confidence": result["confidence"],
             "price": 0,
-            "reason": "Latest chart + news merged inference result",
+            "reason": f"Latest chart + news merged inference result. total_time={total_elapsed:.2f}s",
             "prob_short": result["prob_short"],
             "prob_hold": result["prob_hold"],
             "prob_long": result["prob_long"],
@@ -180,4 +206,8 @@ def predict_latest():
         }
 
     except Exception as e:
+        total_elapsed = time.perf_counter() - total_start
+        print(f"[ERROR] predict_latest failed after {total_elapsed:.2f}s", flush=True)
+        print(str(e), flush=True)
+
         raise HTTPException(status_code=500, detail=str(e))

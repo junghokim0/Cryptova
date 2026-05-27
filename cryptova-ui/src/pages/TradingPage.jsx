@@ -1,11 +1,27 @@
-import { useEffect, useState } from "react";
+import AssetSummary from "../components/AssetSummary";
+import { useEffect, useRef, useState } from "react";
+import { createChart } from "lightweight-charts";
+
 import "../styles/TradingPage.css";
 import logo from "../assets/logo.png";
+
 import {
   getStrategySettings,
   saveStrategySettings,
 } from "../api/strategyApi";
-import { generateSignal, getSignals } from "../api/signalApi";
+
+import { getSignals } from "../api/signalApi";
+
+import { getCandles } from "../api/marketApi";
+import {
+  getOpenPositionPnl,
+  getTradingMarkers,
+  getTradingRuns,
+  getAutoTradingStatus,
+  startAutoTrading,
+  stopAutoTrading,
+  runTradingOnce,
+} from "../api/tradingApi";
 
 function TradingPage({
   user,
@@ -25,40 +41,269 @@ function TradingPage({
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState("");
   const [settingsError, setSettingsError] = useState("");
+
+  const [autoTradingEnabled, setAutoTradingEnabled] = useState(false);
+  const [isChangingAutoTrading, setIsChangingAutoTrading] = useState(false);
+
   const [isStartingTrading, setIsStartingTrading] = useState(false);
   const [tradingMessage, setTradingMessage] = useState("");
   const [tradingError, setTradingError] = useState("");
+
   const [latestSignal, setLatestSignal] = useState(null);
   const [signals, setSignals] = useState([]);
 
+  const chartContainerRef = useRef(null);
+  const chartRef = useRef(null);
+  const candleSeriesRef = useRef(null);
+
+  const [latestPrice, setLatestPrice] = useState(null);
+  const [latestPriceChangePct, setLatestPriceChangePct] = useState(null);
+
+  const [positionPnl, setPositionPnl] = useState(null);
+  const [tradingRuns, setTradingRuns] = useState([]);
+  const [chartError, setChartError] = useState("");
+  const [isChartLoading, setIsChartLoading] = useState(false);
 
   useEffect(() => {
-  async function loadSettings() {
-    if (!user) {
-      return;
+    async function loadSettings() {
+      if (!user) return;
+
+      try {
+        const data = await getStrategySettings();
+
+        setConfidenceThreshold(Number(data.confidence_threshold));
+        setPositionSize(Number(data.position_size));
+        setLeverage(Number(data.leverage));
+        setMaxDrawdownStop(Number(data.max_drawdown_stop));
+      } catch (error) {
+        setSettingsError(error.message || "Failed to load settings.");
+      }
     }
 
-    try {
-      const data = await getStrategySettings();
+    loadSettings();
+  }, [user]);
 
-      setConfidenceThreshold(Number(data.confidence_threshold));
-      setPositionSize(Number(data.position_size));
-      setLeverage(Number(data.leverage));
-      setMaxDrawdownStop(Number(data.max_drawdown_stop));
+  useEffect(() => {
+    loadLatestSignal();
+    loadAutoTradingStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (!chartContainerRef.current) return;
+    if (chartRef.current) return;
+
+    const chart = createChart(chartContainerRef.current, {
+      width: chartContainerRef.current.clientWidth,
+      height: 520,
+      layout: {
+        background: { color: "#0f172a" },
+        textColor: "#d1d5db",
+      },
+      grid: {
+        vertLines: { color: "#1f2937" },
+        horzLines: { color: "#1f2937" },
+      },
+      timeScale: {
+        timeVisible: true,
+        secondsVisible: false,
+        borderColor: "#334155",
+      },
+      rightPriceScale: {
+        borderColor: "#334155",
+      },
+      crosshair: {
+        mode: 1,
+      },
+    });
+
+    const candleSeries = chart.addCandlestickSeries({
+      upColor: "#22c55e",
+      downColor: "#ef4444",
+      borderUpColor: "#22c55e",
+      borderDownColor: "#ef4444",
+      wickUpColor: "#22c55e",
+      wickDownColor: "#ef4444",
+    });
+
+    chartRef.current = chart;
+    candleSeriesRef.current = candleSeries;
+
+    const handleResize = () => {
+      if (!chartContainerRef.current || !chartRef.current) return;
+
+      chartRef.current.applyOptions({
+        width: chartContainerRef.current.clientWidth,
+      });
+    };
+
+    window.addEventListener("resize", handleResize);
+
+    loadChartData();
+
+    const intervalId = setInterval(() => {
+      loadChartData();
+    }, 60000);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      clearInterval(intervalId);
+
+      chart.remove();
+      chartRef.current = null;
+      candleSeriesRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  const loadLatestSignal = async () => {
+    if (!user) return;
+
+    try {
+      const data = await getSignals();
+
+      setSignals(data);
+
+      if (data.length > 0) {
+        setLatestSignal(data[0]);
+      }
     } catch (error) {
-      setSettingsError(error.message || "Failed to load settings.");
-          }
+      console.error("Failed to load latest signal:", error);
+    }
+  };
+
+  const loadAutoTradingStatus = async () => {
+    if (!user) return;
+
+    try {
+      const status = await getAutoTradingStatus();
+      setAutoTradingEnabled(Boolean(status.auto_trading_enabled));
+    } catch (error) {
+      console.error("Failed to load auto trading status:", error);
+    }
+  };
+
+  const loadChartData = async () => {
+    if (!user) return;
+
+    try {
+      setIsChartLoading(true);
+      setChartError("");
+
+      const candles = await getCandles({
+        symbol: "BTCUSDT",
+        interval: "60",
+        limit: 200,
+        category: "linear",
+      });
+
+      const candleData = candles.map((item) => ({
+        time: item.time,
+        open: item.open,
+        high: item.high,
+        low: item.low,
+        close: item.close,
+      }));
+
+      if (candleSeriesRef.current) {
+        candleSeriesRef.current.setData(candleData);
+      }
+
+      if (candleData.length >= 2) {
+        const last = candleData[candleData.length - 1];
+        const prev = candleData[candleData.length - 2];
+
+        setLatestPrice(last.close);
+
+        if (prev.close > 0) {
+          const changePct = ((last.close - prev.close) / prev.close) * 100;
+          setLatestPriceChangePct(changePct);
+        }
+      }
+
+      const markers = await getTradingMarkers({
+        symbol: "BTCUSDT",
+        limit: 100,
+      });
+
+      const entryMarkers = markers
+        .filter((marker) => marker.price > 0)
+        .filter((marker) => marker.marker_type === "ENTRY");
+
+      const exitMarkers = markers
+        .filter((marker) => marker.price > 0)
+        .filter((marker) => marker.marker_type === "EXIT");
+
+      const latestEntry =
+        entryMarkers.length > 0 ? entryMarkers[entryMarkers.length - 1] : null;
+
+      const latestExit =
+        exitMarkers.length > 0 ? exitMarkers[exitMarkers.length - 1] : null;
+
+      const filteredMarkers = [latestEntry, latestExit].filter(Boolean);
+
+      const chartMarkers = filteredMarkers.map((marker) => {
+        let position = "belowBar";
+        let shape = "circle";
+        let color = "#9ca3af";
+
+        if (marker.marker_type === "ENTRY") {
+          position = marker.signal === "LONG" ? "belowBar" : "aboveBar";
+          shape = marker.signal === "LONG" ? "arrowUp" : "arrowDown";
+          color = marker.signal === "LONG" ? "#22c55e" : "#ef4444";
         }
 
-        loadSettings();
-      }, [user]);
+        if (marker.marker_type === "EXIT") {
+          position = "aboveBar";
+          shape = "square";
+          color = marker.color_hint === "green" ? "#22c55e" : "#ef4444";
+        }
 
-      useEffect(() => {
-        loadLatestSignal();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-      }, [user]);
+        return {
+          time: marker.time,
+          position,
+          color,
+          shape,
+          text: "",
+        };
+      });
 
- 
+      if (candleSeriesRef.current) {
+        candleSeriesRef.current.setMarkers(chartMarkers);
+      }
+
+      const pnl = await getOpenPositionPnl({
+        symbol: "BTCUSDT",
+      });
+
+      setPositionPnl(pnl);
+
+      const runs = await getTradingRuns({
+        limit: 10,
+      });
+
+      setTradingRuns(runs);
+    } catch (error) {
+      console.error(error);
+      setChartError(error.message || "Failed to load chart data.");
+    } finally {
+      setIsChartLoading(false);
+    }
+  };
+
+  const handleUseRecommendedSettings = () => {
+    setConfidenceThreshold(46);
+    setPositionSize(1);
+    setLeverage(1);
+    setMaxDrawdownStop(-10);
+
+    setSettingsMessage(
+      "Recommended settings applied. Click Save Settings to store them."
+    );
+    setSettingsError("");
+  };
+
   const handleSaveSettings = async () => {
     setSettingsMessage("");
     setSettingsError("");
@@ -98,48 +343,98 @@ function TradingPage({
     }
   };
 
-  const loadLatestSignal = async () => {
-    if (!user) return;
+  const handleStartAutoTrading = async () => {
+    setTradingMessage("");
+    setTradingError("");
+
+    if (!user) {
+      setTradingError("Please login before starting auto trading.");
+      return;
+    }
 
     try {
-      const data = await getSignals();
+      setIsChangingAutoTrading(true);
 
-      setSignals(data);
+      const result = await startAutoTrading();
 
-      if (data.length > 0) {
-        setLatestSignal(data[0]);
-      }
+      setAutoTradingEnabled(Boolean(result.auto_trading_enabled));
+      setTradingMessage(result.message || "Auto trading started.");
+
+      await loadAutoTradingStatus();
+      await loadChartData();
     } catch (error) {
-      console.error("Failed to load latest signal:", error);
+      setTradingError(error.message || "Failed to start auto trading.");
+    } finally {
+      setIsChangingAutoTrading(false);
     }
   };
 
-  const handleStartAutoTrading = async () => {
-  setTradingMessage("");
-  setTradingError("");
+  const handleStopAutoTrading = async () => {
+    setTradingMessage("");
+    setTradingError("");
 
-  if (!user) {
-    setTradingError("Please login before starting auto trading.");
-    return;
-  }
+    if (!user) {
+      setTradingError("Please login before stopping auto trading.");
+      return;
+    }
 
-  try {
-    setIsStartingTrading(true);
+    try {
+      setIsChangingAutoTrading(true);
 
-    const signal = await generateSignal();
+      const result = await stopAutoTrading();
 
-    setLatestSignal(signal);
-    await loadLatestSignal();
+      setAutoTradingEnabled(Boolean(result.auto_trading_enabled));
+      setTradingMessage(result.message || "Auto trading stopped.");
 
-      setTradingMessage(
-        `AI Signal generated: ${signal.signal} / Confidence ${signal.confidence}%`
-      );
+      await loadAutoTradingStatus();
+      await loadChartData();
     } catch (error) {
-      setTradingError(error.message || "Failed to start auto trading.");
+      setTradingError(error.message || "Failed to stop auto trading.");
+    } finally {
+      setIsChangingAutoTrading(false);
+    }
+  };
+
+  const handleRunOnce = async () => {
+    setTradingMessage("");
+    setTradingError("");
+
+    if (!user) {
+      setTradingError("Please login before running trading.");
+      return;
+    }
+
+    try {
+      setIsStartingTrading(true);
+
+      const result = await runTradingOnce();
+
+      setTradingMessage(result.message || "Trading run completed.");
+
+      await loadLatestSignal();
+      await loadChartData();
+    } catch (error) {
+      setTradingError(error.message || "Failed to run trading.");
     } finally {
       setIsStartingTrading(false);
     }
   };
+
+  const formattedPrice =
+    latestPrice !== null ? Number(latestPrice).toLocaleString() : "--";
+
+  const formattedChange =
+    latestPriceChangePct !== null
+      ? `${latestPriceChangePct >= 0 ? "+" : ""}${latestPriceChangePct.toFixed(
+          2
+        )}%`
+      : "--";
+
+  const changeClass =
+    latestPriceChangePct !== null && latestPriceChangePct >= 0
+      ? "positive"
+      : "negative";
+
   return (
     <div className="trading-page">
       <div className="trading-bg-grid" />
@@ -163,13 +458,23 @@ function TradingPage({
           </button>
         </nav>
 
+        <AssetSummary user={user} />
+
         {user ? (
-          <button type="button" className="trading-login-button" onClick={onLogout}>
+          <button
+            type="button"
+            className="trading-login-button"
+            onClick={onLogout}
+          >
             <span>♙</span>
             Logout
           </button>
         ) : (
-          <button type="button" className="trading-login-button" onClick={onGoLogin}>
+          <button
+            type="button"
+            className="trading-login-button"
+            onClick={onGoLogin}
+          >
             <span>♙</span>
             Login / Sign Up
           </button>
@@ -355,7 +660,11 @@ function TradingPage({
                   </div>
                 </div>
 
-                <button type="button" className="recommended-button">
+                <button
+                  type="button"
+                  className="recommended-button"
+                  onClick={handleUseRecommendedSettings}
+                >
                   Use Recommended Settings
                 </button>
 
@@ -376,21 +685,51 @@ function TradingPage({
                   <p className="settings-error-message">{settingsError}</p>
                 )}
 
+                <div className="auto-trading-status-box">
+                  <span>Auto Trading</span>
+                  <strong className={autoTradingEnabled ? "auto-on" : "auto-off"}>
+                    {autoTradingEnabled ? "ON" : "OFF"}
+                  </strong>
+                </div>
+
+                {autoTradingEnabled ? (
+                  <button
+                    type="button"
+                    className="stop-trading-button"
+                    onClick={handleStopAutoTrading}
+                    disabled={isChangingAutoTrading}
+                  >
+                    {isChangingAutoTrading ? "Stopping..." : "Stop Auto Trading"}{" "}
+                    <span>■</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="start-trading-button"
+                    onClick={handleStartAutoTrading}
+                    disabled={isChangingAutoTrading}
+                  >
+                    {isChangingAutoTrading ? "Starting..." : "Start Auto Trading"}{" "}
+                    <span>↗</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
-                  className="start-trading-button"
-                  onClick={handleStartAutoTrading}
+                  className="run-once-button"
+                  onClick={handleRunOnce}
                   disabled={isStartingTrading}
                 >
-                  {isStartingTrading ? "Starting..." : "Start Auto Trading"} <span>↗</span>
+                  {isStartingTrading ? "Running..." : "Run Once"}
                 </button>
-                                  {tradingMessage && (
-                    <p className="settings-success-message">{tradingMessage}</p>
-                  )}
 
-                  {tradingError && (
-                    <p className="settings-error-message">{tradingError}</p>
-                  )}
+                {tradingMessage && (
+                  <p className="settings-success-message">{tradingMessage}</p>
+                )}
+
+                {tradingError && (
+                  <p className="settings-error-message">{tradingError}</p>
+                )}
               </section>
             </>
           )}
@@ -403,24 +742,51 @@ function TradingPage({
                 BTCUSDT <span>⌄</span>
               </p>
               <h1>
-                67,842.31 <span>+2.35%</span>
+                {formattedPrice}{" "}
+                <span className={changeClass}>{formattedChange}</span>
               </h1>
             </div>
 
             <div className="chart-metrics">
               <div>
-                <p>Total Balance</p>
-                <strong>$128,742.59</strong>
+                <p>Paper Position</p>
+                <strong>{positionPnl ? positionPnl.side : "None"}</strong>
               </div>
+
               <div>
-                <p>Daily PnL</p>
-                <strong className="positive">+$5,382.21</strong>
-                <span>+4.35%</span>
+                <p>Unrealized PnL</p>
+                <strong
+                  className={
+                    positionPnl && positionPnl.unrealized_pnl >= 0
+                      ? "positive"
+                      : "negative"
+                  }
+                >
+                  {positionPnl
+                    ? `${Number(positionPnl.unrealized_pnl).toFixed(4)} USDT`
+                    : "--"}
+                </strong>
+                <span>
+                  {positionPnl
+                    ? `${Number(positionPnl.unrealized_pnl_pct).toFixed(4)}%`
+                    : "--"}
+                </span>
               </div>
+
               <div>
-                <p>Total Return</p>
-                <strong className="positive">+$28,742.59</strong>
-                <span>+28.66%</span>
+                <p>Latest Signal</p>
+                <strong
+                  className={
+                    latestSignal?.signal === "LONG"
+                      ? "positive"
+                      : latestSignal?.signal === "SHORT"
+                      ? "negative"
+                      : ""
+                  }
+                >
+                  {latestSignal ? latestSignal.signal : "NO SIGNAL"}
+                </strong>
+                <span>{latestSignal ? `${latestSignal.confidence}%` : "--"}</span>
               </div>
             </div>
           </div>
@@ -431,145 +797,28 @@ function TradingPage({
             <button className="selected">1D</button>
             <button>1W</button>
             <button>1M</button>
+
+            <button type="button" onClick={loadChartData}>
+              {isChartLoading ? "Loading..." : "Refresh"}
+            </button>
           </div>
 
-          <div className="main-chart-area">
-            <svg viewBox="0 0 980 520" preserveAspectRatio="none">
-              <g className="chart-grid">
-                <line x1="0" y1="80" x2="980" y2="80" />
-                <line x1="0" y1="150" x2="980" y2="150" />
-                <line x1="0" y1="220" x2="980" y2="220" />
-                <line x1="0" y1="290" x2="980" y2="290" />
-                <line x1="0" y1="360" x2="980" y2="360" />
-                <line x1="0" y1="430" x2="980" y2="430" />
+          <div className="main-chart-area real-chart-area">
+            {chartError && <div className="chart-error-message">{chartError}</div>}
 
-                <line x1="140" y1="20" x2="140" y2="480" />
-                <line x1="300" y1="20" x2="300" y2="480" />
-                <line x1="460" y1="20" x2="460" y2="480" />
-                <line x1="620" y1="20" x2="620" y2="480" />
-                <line x1="780" y1="20" x2="780" y2="480" />
-              </g>
+            {!user && (
+              <div className="chart-error-message">
+                로그인 후 차트를 확인할 수 있습니다.
+              </div>
+            )}
 
-              <g className="fake-volume">
-                {Array.from({ length: 58 }).map((_, index) => {
-                  const height = 18 + ((index * 17) % 54);
-                  const x = 20 + index * 15;
+            <div ref={chartContainerRef} className="real-chart-container" />
 
-                  return (
-                    <rect
-                      key={index}
-                      x={x}
-                      y={470 - height}
-                      width="8"
-                      height={height}
-                      rx="2"
-                    />
-                  );
-                })}
-              </g>
-
-              {[
-                [32, 245, 100, "down"],
-                [62, 330, 90, "down"],
-                [92, 280, 80, "up"],
-                [122, 230, 130, "up"],
-                [152, 170, 170, "up"],
-                [182, 125, 155, "down"],
-                [212, 155, 120, "down"],
-                [242, 190, 110, "down"],
-                [272, 230, 100, "down"],
-                [302, 270, 120, "up"],
-                [332, 200, 105, "up"],
-                [362, 220, 90, "down"],
-                [392, 230, 100, "up"],
-                [422, 245, 105, "down"],
-                [452, 270, 90, "down"],
-                [482, 305, 110, "down"],
-                [512, 335, 105, "down"],
-                [542, 320, 80, "up"],
-                [572, 300, 85, "up"],
-                [602, 318, 75, "down"],
-                [632, 332, 72, "down"],
-                [662, 305, 85, "up"],
-                [692, 280, 80, "up"],
-                [722, 260, 90, "down"],
-                [752, 215, 150, "up"],
-                [782, 250, 105, "down"],
-                [812, 270, 82, "down"],
-                [842, 285, 75, "down"],
-                [872, 300, 70, "up"],
-              ].map(([x, y, h, type], index) => (
-                <g key={index} className={`main-candle ${type}`}>
-                  <line x1={x} y1={y - h / 2} x2={x} y2={y + h / 2} />
-                  <rect
-                    x={x - 7}
-                    y={y - h / 4}
-                    width="14"
-                    height={h / 2}
-                    rx="2"
-                  />
-                </g>
-              ))}
-
-              <g className="strategy-lines">
-                <line x1="0" y1="120" x2="900" y2="120" className="line-red" />
-                <line
-                  x1="0"
-                  y1="185"
-                  x2="900"
-                  y2="185"
-                  className="line-orange"
-                />
-                <line
-                  x1="0"
-                  y1="255"
-                  x2="900"
-                  y2="255"
-                  className="line-green"
-                />
-                <line x1="0" y1="315" x2="900" y2="315" className="line-blue" />
-                <line
-                  x1="0"
-                  y1="375"
-                  x2="900"
-                  y2="375"
-                  className="line-darkblue"
-                />
-              </g>
-            </svg>
-
-            <div className="chart-tag red-tag">
-              Max. Drawdown Stop <b>{maxDrawdownStop}%</b>
-            </div>
-            <div className="chart-tag orange-tag">
-              Max. Position Size <b>{positionSize}%</b>
-            </div>
-            <div className="chart-tag green-tag">Take Profit 2</div>
-            <div className="chart-tag blue-tag">Take Profit 1</div>
-            <div className="chart-tag navy-tag">Entry Price</div>
-
-            <div className="price-axis">
-              <span>6,300</span>
-              <span>6,200</span>
-              <span>6,100</span>
-              <span>5,900</span>
-              <span>5,800</span>
-              <span>5,700</span>
-              <span>5,600</span>
-              <span>5,500</span>
-              <span>5,400</span>
-              <span>5,300</span>
-              <span>5,200</span>
-              <span>5,100</span>
-            </div>
-
-            <div className="date-axis">
-              <span>May 1</span>
-              <span>May 8</span>
-              <span>May 15</span>
-              <span>May 22</span>
-              <span>May 29</span>
-            </div>
+            {isChartLoading && (
+              <div className="chart-loading-message">
+                차트 데이터를 불러오는 중...
+              </div>
+            )}
           </div>
         </section>
 
@@ -577,15 +826,15 @@ function TradingPage({
           <section className="ai-signal-box">
             <h2>AI Signal</h2>
 
-              <div
-                  className={`trading-gauge ${
-                    latestSignal?.signal === "LONG"
-                      ? "gauge-long"
-                      : latestSignal?.signal === "SHORT"
-                      ? "gauge-short"
-                      : "gauge-hold"
-                  }`}
-                >
+            <div
+              className={`trading-gauge ${
+                latestSignal?.signal === "LONG"
+                  ? "gauge-long"
+                  : latestSignal?.signal === "SHORT"
+                  ? "gauge-short"
+                  : "gauge-hold"
+              }`}
+            >
               <div className="trading-gauge-inner">
                 <strong
                   className={
@@ -617,7 +866,11 @@ function TradingPage({
                         : "hold"
                     }`}
                   >
-                    {signal.signal === "LONG" ? "↑" : signal.signal === "SHORT" ? "↓" : "–"}
+                    {signal.signal === "LONG"
+                      ? "↑"
+                      : signal.signal === "SHORT"
+                      ? "↓"
+                      : "–"}
                   </span>
 
                   <div>
@@ -643,6 +896,64 @@ function TradingPage({
                 </div>
               ))}
             </div>
+
+            <div className="paper-position-box">
+              <h3>Current Paper Position</h3>
+
+              {positionPnl ? (
+                <div className="paper-position-list">
+                  <div>
+                    <span>Side</span>
+                    <strong
+                      className={positionPnl.side === "LONG" ? "long" : "short"}
+                    >
+                      {positionPnl.side}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span>Qty</span>
+                    <strong>{positionPnl.qty}</strong>
+                  </div>
+
+                  <div>
+                    <span>Entry</span>
+                    <strong>{Number(positionPnl.entry_price).toFixed(2)}</strong>
+                  </div>
+
+                  <div>
+                    <span>Current</span>
+                    <strong>{Number(positionPnl.current_price).toFixed(2)}</strong>
+                  </div>
+
+                  <div>
+                    <span>Unrealized PnL</span>
+                    <strong
+                      className={
+                        positionPnl.unrealized_pnl >= 0 ? "long" : "short"
+                      }
+                    >
+                      {Number(positionPnl.unrealized_pnl).toFixed(4)} USDT
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span>Unrealized PnL %</span>
+                    <strong
+                      className={
+                        positionPnl.unrealized_pnl_pct >= 0 ? "long" : "short"
+                      }
+                    >
+                      {Number(positionPnl.unrealized_pnl_pct).toFixed(4)}%
+                    </strong>
+                  </div>
+                </div>
+              ) : (
+                <p className="no-paper-position">
+                  현재 열린 Paper 포지션이 없습니다.
+                </p>
+              )}
+            </div>
           </section>
 
           <section className="explanation-box">
@@ -654,10 +965,70 @@ function TradingPage({
               <h3>AI Trade Explanation</h3>
             </div>
 
-            <p>
-              AI analyzes each Long/Short position entry reason and explains the
-              current market context.
-            </p>
+            {latestSignal ? (
+              <div className="explanation-content">
+                <div className="explanation-item">
+                  <strong>Reason</strong>
+                  <p>
+                    {latestSignal.reason_summary ||
+                      "No reason summary is available for this signal."}
+                  </p>
+                </div>
+
+                <div className="explanation-item">
+                  <strong>Risk Filter</strong>
+                  <p>
+                    {latestSignal.filter_summary ||
+                      "No risk filter summary is available."}
+                  </p>
+                </div>
+
+                <div className="explanation-item">
+                  <strong>News Context</strong>
+                  <p>
+                    {latestSignal.news_summary ||
+                      "News summary is not connected yet."}
+                  </p>
+                </div>
+
+                <div className="explanation-item">
+                  <strong>Chart Context</strong>
+                  <p>
+                    {latestSignal.chart_summary ||
+                      "Chart summary is not connected yet."}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p>
+                AI Signal이 생성되면 진입 이유, 리스크 필터, 뉴스/차트 요약이 여기에 표시됩니다.
+              </p>
+            )}
+          </section>
+
+          <section className="trading-runs-box">
+            <h3>Recent Auto Trading Runs</h3>
+
+            {tradingRuns.length > 0 ? (
+              <div className="trading-runs-list">
+                {tradingRuns.map((run) => (
+                  <div className="trading-run-item" key={run.id}>
+                    <div className="run-item-top">
+                      <strong>{run.action}</strong>
+                      <span>{run.signal || "-"}</span>
+                    </div>
+
+                    <p>{run.message}</p>
+
+                    <small>{new Date(run.executed_at).toLocaleString()}</small>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="no-paper-position">
+                아직 자동매매 실행 기록이 없습니다.
+              </p>
+            )}
           </section>
         </aside>
       </main>

@@ -9,7 +9,7 @@ class BacktestRunRequest(BaseModel):
     start_date: str
     end_date: str
 
-    confidence_threshold: float = Field(..., ge=50, le=90)
+    confidence_threshold: float = Field(..., ge=30, le=90)
     position_size: float = Field(..., ge=0, le=100)
     max_drawdown_stop: float = Field(..., ge=-30, le=-5)
 

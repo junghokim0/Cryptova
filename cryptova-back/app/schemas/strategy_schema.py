@@ -7,7 +7,7 @@ class StrategySettingRequest(BaseModel):
     exchange: str = Field(default="Bybit", max_length=50)
     symbol: str = Field(default="BTCUSDT", max_length=50)
 
-    confidence_threshold: float = Field(..., ge=50, le=90)
+    confidence_threshold: float = Field(default=46.0, ge=30, le=90)
     holding_strategy: str = Field(default="24h Fixed", max_length=50)
 
     position_size: float = Field(..., ge=0, le=100)

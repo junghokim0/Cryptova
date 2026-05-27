@@ -58,6 +58,9 @@
   align-items: center;
   gap: 52px;
   margin-bottom: 22px;
+  position: relative;
+  z-index: 10;
+  overflow: visible;
 }
 
 .trading-logo-button {
@@ -109,7 +112,6 @@
 }
 
 .trading-login-button {
-  margin-left: auto;
   height: 44px;
   padding: 0 18px;
   border: 1px solid rgba(37, 99, 235, 0.55);
@@ -1010,4 +1012,227 @@
   color: #fecaca;
   font-size: 13px;
   font-weight: 700;
+}
+.real-chart-area {
+  position: relative;
+  height: 520px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.real-chart-container {
+  width: 100%;
+  height: 520px;
+}
+
+.chart-error-message {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 10;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(127, 29, 29, 0.9);
+  color: #fecaca;
+  font-size: 13px;
+}
+
+.chart-loading-message {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  z-index: 10;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.paper-position-box {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.paper-position-box h3 {
+  margin: 0 0 14px;
+  font-size: 15px;
+  color: #e5e7eb;
+}
+
+.paper-position-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.paper-position-list div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.paper-position-list span {
+  color: #94a3b8;
+}
+
+.paper-position-list strong {
+  color: #e5e7eb;
+  text-align: right;
+}
+
+.no-paper-position {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.trading-runs-box {
+  margin-top: 18px;
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.84);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.trading-runs-box h3 {
+  margin: 0 0 14px;
+  font-size: 16px;
+  color: #e5e7eb;
+}
+
+.trading-runs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.trading-run-item {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.run-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.run-item-top strong {
+  color: #bfdbfe;
+  font-size: 12px;
+}
+
+.run-item-top span {
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.trading-run-item p {
+  margin: 8px 0;
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.trading-run-item small {
+  color: #64748b;
+  font-size: 11px;
+}
+.auto-trading-status-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 14px;
+  margin-bottom: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  font-size: 13px;
+}
+
+.auto-trading-status-box span {
+  color: #94a3b8;
+}
+
+.auto-trading-status-box strong {
+  font-size: 14px;
+}
+
+.auto-on {
+  color: #22c55e;
+}
+
+.auto-off {
+  color: #ef4444;
+}
+
+.stop-trading-button,
+.run-once-button {
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  padding: 13px 16px;
+  margin-top: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.stop-trading-button {
+  background: linear-gradient(135deg, #ef4444, #991b1b);
+  color: white;
+}
+
+.stop-trading-button:hover {
+  filter: brightness(1.05);
+}
+
+.run-once-button {
+  background: rgba(37, 99, 235, 0.18);
+  border: 1px solid rgba(59, 130, 246, 0.55);
+  color: #bfdbfe;
+}
+
+.run-once-button:hover {
+  background: rgba(37, 99, 235, 0.28);
+}
+
+.stop-trading-button:disabled,
+.run-once-button:disabled,
+.start-trading-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+.explanation-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.explanation-item {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.45);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.explanation-item strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #bfdbfe;
+  font-size: 13px;
+}
+
+.explanation-item p {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1.6;
 }

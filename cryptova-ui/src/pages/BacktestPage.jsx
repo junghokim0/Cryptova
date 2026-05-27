@@ -1,71 +1,51 @@
-import { getExchangeBalance } from "../api/exchangeApi";
 import { useEffect, useMemo, useState } from "react";
 import "../styles/BacktestPage.css";
 import logo from "../assets/logo.png";
 import { getBacktestResults, runBacktest } from "../api/backtestApi";
+import AssetSummary from "../components/AssetSummary";
+const BACKTEST_START_DATE = "2026-01-03";
+const BACKTEST_END_DATE = "2026-03-30";
 
 const initialSettings = {
-  confidence: 65,
+  confidence: 46,
   holdingPeriod: 24,
-  positionSize: 5,
+  positionSize: 1,
   maxDrawdown: -10,
 };
 
 const defaultResult = {
-  total_return: 28.63,
-  cagr: 23.41,
-  sharpe: 1.82,
-  mdd: -8.21,
-  win_rate: 62.14,
-  trade_count: 124,
-  start_date: "2024-01-01",
-  end_date: "2025-05-20",
-  created_at: "2025-05-20T15:30:21",
+  total_return: 0,
+  cagr: 0,
+  sharpe: 0,
+  mdd: 0,
+  win_rate: 0,
+  trade_count: 0,
+  start_date: BACKTEST_START_DATE,
+  end_date: BACKTEST_END_DATE,
+  created_at: null,
+  confidence_threshold: 46,
+  position_size: 1,
+  max_drawdown_stop: -10,
   result_json: {
-    monthly_returns: [
-      "+3.21",
-      "-1.84",
-      "+4.57",
-      "+2.31",
-      "+6.72",
-      "-2.11",
-      "+3.88",
-      "+1.25",
-      "-3.45",
-      "+5.19",
-      "+2.73",
-      "+7.02",
-      "+4.23",
-      "-1.73",
-      "+2.96",
-      "+3.83",
-      "+2.44",
+    equity_curve: [
+      { date: BACKTEST_START_DATE, value: 10000 },
+      { date: BACKTEST_END_DATE, value: 10000 },
     ],
+    monthly_returns: [],
     trade_stats: {
-      long_count: 78,
-      short_count: 28,
-      hold_count: 18,
-      long_win_rate: 67.95,
-      short_win_rate: 57.14,
-      avg_holding_time: "18.6h",
-      avg_win: "+2.31%",
-      avg_loss: "-1.78%",
-      profit_factor: 1.94,
+      long_count: 0,
+      short_count: 0,
+      hold_count: 0,
+      long_win_rate: 0,
+      short_win_rate: 0,
+      avg_holding_time: "24.0h",
+      avg_win: "+0.00%",
+      avg_loss: "0.00%",
+      profit_factor: 0,
     },
-    top_winning_trades: [
-      { date: "2024-12-11", side: "LONG", return: "+4.86%" },
-      { date: "2024-10-28", side: "LONG", return: "+4.21%" },
-      { date: "2025-01-15", side: "LONG", return: "+3.96%" },
-      { date: "2024-03-05", side: "LONG", return: "+3.77%" },
-      { date: "2024-07-22", side: "SHORT", return: "+3.45%" },
-    ],
-    top_losing_trades: [
-      { date: "2024-08-07", side: "LONG", return: "-3.45%" },
-      { date: "2024-06-18", side: "LONG", return: "-3.21%" },
-      { date: "2024-09-03", side: "SHORT", return: "-2.98%" },
-      { date: "2025-02-12", side: "LONG", return: "-2.72%" },
-      { date: "2024-11-14", side: "SHORT", return: "-2.45%" },
-    ],
+    top_winning_trades: [],
+    top_losing_trades: [],
+    trade_samples: [],
   },
 };
 
@@ -88,6 +68,130 @@ function formatDateTime(value) {
   return `${yyyy}-${mm}-${dd} ${hh}:${min}:${sec}`;
 }
 
+function formatMoney(value) {
+  const number = Number(value || 0);
+
+  return number.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 3,
+  });
+}
+
+function makePolylinePoints(data, width = 800, height = 300) {
+  if (!data || data.length === 0) return "";
+
+  const paddingX = 10;
+  const paddingY = 22;
+
+  const values = data.map((item) => Number(item.value));
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+  const range = maxValue - minValue || 1;
+
+  return data
+    .map((item, index) => {
+      const x =
+        paddingX +
+        (index / Math.max(data.length - 1, 1)) * (width - paddingX * 2);
+
+      const normalized = (Number(item.value) - minValue) / range;
+
+      const y = height - paddingY - normalized * (height - paddingY * 2);
+
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(" ");
+}
+
+function makeDrawdownPath(data, width = 260, height = 150) {
+  if (!data || data.length === 0) {
+    return `M0 ${height} L${width} ${height} L${width} ${height} L0 ${height} Z`;
+  }
+
+  let peak = Number(data[0].value);
+  const drawdowns = data.map((item) => {
+    const value = Number(item.value);
+    peak = Math.max(peak, value);
+
+    if (peak <= 0) return 0;
+
+    return ((value / peak) - 1) * 100;
+  });
+
+  const minDrawdown = Math.min(...drawdowns, -0.01);
+  const maxDrawdown = 0;
+  const range = maxDrawdown - minDrawdown || 1;
+
+  const points = drawdowns.map((dd, index) => {
+    const x = (index / Math.max(drawdowns.length - 1, 1)) * width;
+    const normalized = (dd - minDrawdown) / range;
+    const y = 20 + (1 - normalized) * (height - 35);
+
+    return `${x.toFixed(2)} ${y.toFixed(2)}`;
+  });
+
+  return `M${points.join(" L")} L${width} ${height} L0 ${height} Z`;
+}
+
+function makeEquityDateLabels(equityCurve) {
+  if (!equityCurve || equityCurve.length === 0) return [];
+
+  const labelCount = Math.min(6, equityCurve.length);
+  const labels = [];
+
+  for (let i = 0; i < labelCount; i += 1) {
+    const index = Math.floor(
+      (i / Math.max(labelCount - 1, 1)) * (equityCurve.length - 1)
+    );
+
+    labels.push(equityCurve[index]?.date || "");
+  }
+
+  return labels;
+}
+
+function makeReturnDistribution(tradeSamples) {
+  if (!tradeSamples || tradeSamples.length === 0) {
+    return [10, 10, 10, 10, 10, 10, 10];
+  }
+
+  const returns = tradeSamples
+    .map((trade) => Number(trade.equity_return_pct))
+    .filter((value) => Number.isFinite(value));
+
+  if (returns.length === 0) {
+    return [10, 10, 10, 10, 10, 10, 10];
+  }
+
+  const bins = [0, 0, 0, 0, 0, 0, 0];
+
+  returns.forEach((value) => {
+    if (value <= -2) bins[0] += 1;
+    else if (value <= -1) bins[1] += 1;
+    else if (value < 0) bins[2] += 1;
+    else if (value === 0) bins[3] += 1;
+    else if (value < 1) bins[4] += 1;
+    else if (value < 2) bins[5] += 1;
+    else bins[6] += 1;
+  });
+
+  const maxCount = Math.max(...bins, 1);
+
+  return bins.map((count) => Math.max(8, (count / maxCount) * 100));
+}
+
+function getAverageTradeReturn(tradeSamples) {
+  if (!tradeSamples || tradeSamples.length === 0) return 0;
+
+  const returns = tradeSamples
+    .map((trade) => Number(trade.equity_return_pct))
+    .filter((value) => Number.isFinite(value));
+
+  if (returns.length === 0) return 0;
+
+  return returns.reduce((sum, value) => sum + value, 0) / returns.length;
+}
+
 function BacktestPage({
   user,
   onGoHome,
@@ -96,11 +200,8 @@ function BacktestPage({
   onGoLogin,
   onLogout,
 }) {
-  const [assetBalance, setAssetBalance] = useState(null);
-  const [assetLoading, setAssetLoading] = useState(false);
-  const [assetError, setAssetError] = useState("");
+  
   const [settings, setSettings] = useState(initialSettings);
-  const [isAssetOpen, setIsAssetOpen] = useState(true);
 
   const [currentResult, setCurrentResult] = useState(defaultResult);
   const [isRunning, setIsRunning] = useState(false);
@@ -108,6 +209,22 @@ function BacktestPage({
   const [backtestError, setBacktestError] = useState("");
 
   const resultJson = currentResult?.result_json || {};
+
+  const equityCurve = useMemo(() => {
+    return resultJson.equity_curve || defaultResult.result_json.equity_curve;
+  }, [resultJson.equity_curve]);
+
+  const equityPolylinePoints = useMemo(() => {
+    return makePolylinePoints(equityCurve, 800, 300);
+  }, [equityCurve]);
+
+  const drawdownPath = useMemo(() => {
+    return makeDrawdownPath(equityCurve, 260, 150);
+  }, [equityCurve]);
+
+  const equityDateLabels = useMemo(() => {
+    return makeEquityDateLabels(equityCurve);
+  }, [equityCurve]);
 
   const monthlyReturns = useMemo(() => {
     return resultJson.monthly_returns || defaultResult.result_json.monthly_returns;
@@ -130,6 +247,18 @@ function BacktestPage({
     );
   }, [resultJson.top_losing_trades]);
 
+  const tradeSamples = useMemo(() => {
+    return resultJson.trade_samples || [];
+  }, [resultJson.trade_samples]);
+
+  const returnDistribution = useMemo(() => {
+    return makeReturnDistribution(tradeSamples);
+  }, [tradeSamples]);
+
+  const averageTradeReturn = useMemo(() => {
+    return getAverageTradeReturn(tradeSamples);
+  }, [tradeSamples]);
+
   useEffect(() => {
     async function loadLatestBacktest() {
       if (!user) return;
@@ -139,6 +268,15 @@ function BacktestPage({
 
         if (results.length > 0) {
           setCurrentResult(results[0]);
+
+          setSettings((prev) => ({
+            ...prev,
+            confidence: Number(results[0].confidence_threshold ?? prev.confidence),
+            positionSize: Number(results[0].position_size ?? prev.positionSize),
+            maxDrawdown: Number(
+              results[0].max_drawdown_stop ?? prev.maxDrawdown
+            ),
+          }));
         }
       } catch (error) {
         setBacktestError(error.message || "Failed to load backtest results.");
@@ -175,8 +313,8 @@ function BacktestPage({
 
       const result = await runBacktest({
         symbol: "BTCUSDT",
-        start_date: "2024-01-01",
-        end_date: "2025-05-20",
+        start_date: BACKTEST_START_DATE,
+        end_date: BACKTEST_END_DATE,
         confidence_threshold: settings.confidence,
         position_size: settings.positionSize,
         max_drawdown_stop: settings.maxDrawdown,
@@ -191,24 +329,8 @@ function BacktestPage({
     }
   };
 
-  const loadExchangeBalance = async () => {
-  if (!user) {
-    setAssetError("Please login to load asset data.");
-    return;
-  }
 
-  try {
-    setAssetLoading(true);
-    setAssetError("");
 
-    const data = await getExchangeBalance();
-    setAssetBalance(data);
-  } catch (error) {
-    setAssetError(error.message || "Failed to load asset data.");
-  } finally {
-    setAssetLoading(false);
-  }
-    };
   return (
     <div className="backtest-page">
       <div className="backtest-bg-grid" />
@@ -230,23 +352,7 @@ function BacktestPage({
           <button className="backtest-nav-link active">Backtest</button>
         </nav>
 
-        <button
-          type="button"
-          className="asset-button"
-          onClick={() => {
-            setIsAssetOpen((prev) => !prev);
-            loadExchangeBalance();
-          }}
-        >
-          <span className="asset-icon">▣</span>
-          <div>
-            <p>Total Asset</p>
-            <strong>$10,000.00</strong>
-          </div>
-          <span className={isAssetOpen ? "asset-arrow open" : "asset-arrow"}>
-            ⌃
-          </span>
-        </button>
+        <AssetSummary user={user} />
 
         <button className="icon-button">♧</button>
         <button className="icon-button">⚙</button>
@@ -266,13 +372,7 @@ function BacktestPage({
         )}
       </header>
 
-      <main
-        className={
-          isAssetOpen
-            ? "backtest-layout asset-open"
-            : "backtest-layout asset-closed"
-        }
-      >
+      <main className="backtest-layout">
         <aside className="backtest-sidebar">
           <div className="sidebar-title-row">
             <h2>Strategy Settings</h2>
@@ -289,9 +389,10 @@ function BacktestPage({
                 <span>Confidence Threshold</span>
                 <b>{settings.confidence}%</b>
               </div>
+
               <input
                 type="range"
-                min="50"
+                min="30"
                 max="90"
                 step="1"
                 value={settings.confidence}
@@ -299,15 +400,20 @@ function BacktestPage({
                   updateSetting("confidence", Number(e.target.value))
                 }
                 style={{
-                  "--value": `${((settings.confidence - 50) / 40) * 100}%`,
+                  "--value": `${((settings.confidence - 30) / 60) * 100}%`,
                 }}
               />
+
               <div className="range-scale">
-                <span>50%</span>
-                <span>65%</span>
+                <span>30%</span>
+                <span>46%</span>
                 <span>90%</span>
               </div>
-              <p>Minimum confidence level for signal activation.</p>
+
+              <p>
+                Minimum confidence level for signal activation. The recommended
+                threshold from validation is 46%.
+              </p>
             </div>
 
             <div className="bt-setting-block">
@@ -323,6 +429,7 @@ function BacktestPage({
                 <span>Position Size</span>
                 <b>{settings.positionSize}%</b>
               </div>
+
               <input
                 type="range"
                 min="1"
@@ -336,11 +443,13 @@ function BacktestPage({
                   "--value": `${((settings.positionSize - 1) / 19) * 100}%`,
                 }}
               />
+
               <div className="range-scale">
                 <span>1%</span>
                 <span>5%</span>
                 <span>20%</span>
               </div>
+
               <p>Capital ratio used for each simulated trade.</p>
             </div>
 
@@ -349,6 +458,7 @@ function BacktestPage({
                 <span>Max Drawdown Stop</span>
                 <b>{settings.maxDrawdown}%</b>
               </div>
+
               <input
                 type="range"
                 min="-30"
@@ -362,11 +472,13 @@ function BacktestPage({
                   "--value": `${((settings.maxDrawdown + 30) / 25) * 100}%`,
                 }}
               />
+
               <div className="range-scale">
                 <span>-30%</span>
                 <span>-10%</span>
                 <span>-5%</span>
               </div>
+
               <p>Stop backtest when cumulative loss exceeds this threshold.</p>
             </div>
           </section>
@@ -405,7 +517,9 @@ function BacktestPage({
             <p className="backtest-error-message">{backtestError}</p>
           )}
 
-          <p className="data-period">Data period: 2024-01-01 ~ 2025-05-20</p>
+          <p className="data-period">
+            Available test period: {BACKTEST_START_DATE} ~ {BACKTEST_END_DATE}
+          </p>
         </aside>
 
         <section className="backtest-dashboard">
@@ -414,7 +528,7 @@ function BacktestPage({
               <h1>Backtest Result Summary</h1>
               <span>
                 {currentResult.start_date} ~ {currentResult.end_date}{" "}
-                (Non-overlap)
+                (24h Non-overlap)
               </span>
             </div>
             <p>Last updated: {formatDateTime(currentResult.created_at)} ⟳</p>
@@ -423,23 +537,36 @@ function BacktestPage({
           <section className="summary-grid">
             <article>
               <p>Total Return</p>
-              <strong className="positive">
-                +{Number(currentResult.total_return).toFixed(2)}%
+              <strong
+                className={
+                  Number(currentResult.total_return) >= 0 ? "positive" : "negative"
+                }
+              >
+                {Number(currentResult.total_return) >= 0 ? "+" : ""}
+                {Number(currentResult.total_return).toFixed(2)}%
               </strong>
               <span>Cumulative Return</span>
             </article>
+
             <article>
               <p>CAGR</p>
-              <strong className="positive">
-                +{Number(currentResult.cagr).toFixed(2)}%
+              <strong
+                className={
+                  Number(currentResult.cagr) >= 0 ? "positive" : "negative"
+                }
+              >
+                {Number(currentResult.cagr) >= 0 ? "+" : ""}
+                {Number(currentResult.cagr).toFixed(2)}%
               </strong>
               <span>Annualized Return</span>
             </article>
+
             <article>
               <p>Sharpe Ratio</p>
               <strong>{Number(currentResult.sharpe).toFixed(2)}</strong>
               <span>Risk-adjusted</span>
             </article>
+
             <article>
               <p>Max Drawdown</p>
               <strong className="negative">
@@ -447,11 +574,13 @@ function BacktestPage({
               </strong>
               <span>MDD</span>
             </article>
+
             <article>
               <p>Win Rate</p>
               <strong>{Number(currentResult.win_rate).toFixed(2)}%</strong>
               <span>Winning Trades</span>
             </article>
+
             <article>
               <p>Trade Count</p>
               <strong>{currentResult.trade_count}</strong>
@@ -467,7 +596,7 @@ function BacktestPage({
                   <button>All</button>
                   <button>6M</button>
                   <button>1Y</button>
-                  <button className="active">Full</button>
+                  <button className="active">Test</button>
                 </div>
               </div>
 
@@ -483,36 +612,21 @@ function BacktestPage({
 
                   <polyline
                     className="equity-line"
-                    points="10,260 60,240 95,265 130,210 170,200 220,170 260,190 310,150 350,160 400,115 440,130 490,90 540,70 590,95 640,80 690,92 750,68 790,45"
-                  />
-
-                  <polyline
-                    className="benchmark-line"
-                    points="10,260 60,255 95,250 130,245 170,230 220,220 260,225 310,205 350,198 400,180 440,185 490,155 540,140 590,158 640,148 690,135 750,130 790,115"
-                  />
-
-                  <path
-                    className="drawdown-area"
-                    d="M80 265 L120 280 L160 250 L200 260 L250 250 L310 270 L360 285 L420 295 L500 300 L560 286 L620 280 L620 330 L80 330 Z"
+                    points={equityPolylinePoints}
                   />
                 </svg>
 
                 <div className="chart-months">
-                  <span>2024-01</span>
-                  <span>2024-03</span>
-                  <span>2024-05</span>
-                  <span>2024-07</span>
-                  <span>2024-09</span>
-                  <span>2024-11</span>
-                  <span>2025-01</span>
-                  <span>2025-03</span>
-                  <span>2025-05</span>
+                  {equityDateLabels.map((date, index) => (
+                    <span key={`${date}-${index}`}>{date}</span>
+                  ))}
                 </div>
               </div>
             </article>
 
             <article className="trade-stats-card">
               <h2>Trade Statistics</h2>
+
               <div className="donut-wrap">
                 <div className="donut-chart">
                   <div>
@@ -520,18 +634,16 @@ function BacktestPage({
                     <strong>{currentResult.trade_count}</strong>
                   </div>
                 </div>
+
                 <ul>
                   <li>
-                    <b className="green-dot" /> LONG 62.9% (
-                    {tradeStats.long_count})
+                    <b className="green-dot" /> LONG ({tradeStats.long_count})
                   </li>
                   <li>
-                    <b className="red-dot" /> SHORT 22.6% (
-                    {tradeStats.short_count})
+                    <b className="red-dot" /> SHORT ({tradeStats.short_count})
                   </li>
                   <li>
-                    <b className="gray-dot" /> HOLD 14.5% (
-                    {tradeStats.hold_count})
+                    <b className="gray-dot" /> HOLD ({tradeStats.hold_count})
                   </li>
                 </ul>
               </div>
@@ -571,43 +683,61 @@ function BacktestPage({
 
           <section className="monthly-card">
             <h2>Monthly Returns</h2>
-            <div className="month-row">
-              {monthlyReturns.map((value, index) => (
-                <span
-                  key={index}
-                  className={
-                    value.startsWith("+") ? "month-positive" : "month-negative"
-                  }
-                >
-                  {value}
-                </span>
-              ))}
-            </div>
+
+            {monthlyReturns.length > 0 ? (
+              <div className="month-row">
+                {monthlyReturns.map((value, index) => (
+                  <span
+                    key={`${value}-${index}`}
+                    className={
+                      String(value).startsWith("+")
+                        ? "month-positive"
+                        : "month-negative"
+                    }
+                  >
+                    {value}%
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="backtest-warning">
+                No monthly return data yet. Run backtest to generate results.
+              </p>
+            )}
           </section>
 
           <section className="bottom-grid">
             <article>
               <h2>Return Distribution</h2>
+
               <div className="bar-chart">
-                {[18, 35, 56, 100, 62, 42, 18].map((height, index) => (
+                {returnDistribution.map((height, index) => (
                   <span key={index} style={{ height: `${height}%` }} />
                 ))}
               </div>
+
               <p>
-                Average Return: <strong className="positive">+0.48%</strong>
+                Average Return:{" "}
+                <strong
+                  className={
+                    averageTradeReturn >= 0 ? "positive" : "negative"
+                  }
+                >
+                  {averageTradeReturn >= 0 ? "+" : ""}
+                  {averageTradeReturn.toFixed(2)}%
+                </strong>
               </p>
             </article>
 
             <article>
               <h2>Drawdown</h2>
+
               <div className="drawdown-mini">
                 <svg viewBox="0 0 260 150" preserveAspectRatio="none">
-                  <path
-                    d="M0 20 L20 35 L40 28 L60 60 L85 48 L105 90 L130 115 L160 70 L190 80 L220 45 L260 35 L260 150 L0 150 Z"
-                    className="dd-path"
-                  />
+                  <path d={drawdownPath} className="dd-path" />
                 </svg>
               </div>
+
               <p>
                 Max Drawdown:{" "}
                 <strong className="negative">
@@ -618,134 +748,50 @@ function BacktestPage({
 
             <article>
               <h2>Top 5 Winning Trades</h2>
-              <table>
-                <tbody>
-                  {topWinningTrades.map((trade, index) => (
-                    <tr key={`${trade.date}-${index}`}>
-                      <td>{trade.date}</td>
-                      <td>{trade.side}</td>
-                      <td>{trade.return}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+
+              {topWinningTrades.length > 0 ? (
+                <table>
+                  <tbody>
+                    {topWinningTrades.map((trade, index) => (
+                      <tr key={`${trade.date}-${index}`}>
+                        <td>{trade.date}</td>
+                        <td>{trade.side}</td>
+                        <td>{trade.return}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p>No winning trades.</p>
+              )}
             </article>
 
             <article>
               <h2>Top 5 Losing Trades</h2>
-              <table>
-                <tbody>
-                  {topLosingTrades.map((trade, index) => (
-                    <tr key={`${trade.date}-${index}`}>
-                      <td>{trade.date}</td>
-                      <td>{trade.side}</td>
-                      <td>{trade.return}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+
+              {topLosingTrades.length > 0 ? (
+                <table>
+                  <tbody>
+                    {topLosingTrades.map((trade, index) => (
+                      <tr key={`${trade.date}-${index}`}>
+                        <td>{trade.date}</td>
+                        <td>{trade.side}</td>
+                        <td>{trade.return}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p>No losing trades.</p>
+              )}
             </article>
           </section>
 
           <p className="backtest-warning">
-            Backtest results are based on historical data and do not guarantee
-            future returns.
+            Backtest results are calculated from historical prediction CSV and
+            do not guarantee future returns.
           </p>
         </section>
-
-        <aside className={isAssetOpen ? "asset-panel open" : "asset-panel closed"}>
-          <button
-            className="asset-close-button"
-            type="button"
-            onClick={() => setIsAssetOpen(false)}
-          >
-            ×
-          </button>
-
-          <h2>Asset</h2>
-
-          <section className="asset-summary-card">
-          <h3>Total Asset Summary</h3>
-
-          {assetLoading ? (
-            <p>Loading asset data...</p>
-          ) : assetError ? (
-            <p className="asset-error">{assetError}</p>
-          ) : assetBalance ? (
-            <>
-              <div className="asset-big-card">
-                <p>Wallet Balance</p>
-                <strong>
-                  ${Number(assetBalance.wallet_balance).toLocaleString()}
-                </strong>
-                <div>
-                  <span>Coin</span>
-                  <b>{assetBalance.coin}</b>
-                </div>
-                <div>
-                  <span>Testnet</span>
-                  <b>{assetBalance.is_testnet ? "True" : "False"}</b>
-                </div>
-              </div>
-
-              <div className="asset-list">
-                <p>
-                  <span>Available Balance</span>
-                  <strong>
-                    ${Number(assetBalance.available_balance).toLocaleString()}
-                  </strong>
-                </p>
-                <p>
-                  <span>Used Margin</span>
-                  <strong>
-                    ${Number(assetBalance.used_margin).toLocaleString()}
-                  </strong>
-                </p>
-                <p>
-                  <span>Unrealized PnL</span>
-                  <strong
-                    className={
-                      Number(assetBalance.unrealized_pnl) >= 0
-                        ? "positive"
-                        : "negative"
-                    }
-                  >
-                    ${Number(assetBalance.unrealized_pnl).toLocaleString()}
-                  </strong>
-                </p>
-                <p>
-                  <span>Exchange</span>
-                  <strong>{assetBalance.exchange}</strong>
-                </p>
-              </div>
-            </>
-          ) : (
-            <p>Click Total Asset to load balance.</p>
-          )}
-        </section>
-
-          <section className="asset-composition-card">
-            <h3>Asset Composition</h3>
-            <div className="asset-donut">
-              <div>
-                <span>Total</span>
-                <strong>$10,000</strong>
-              </div>
-            </div>
-
-            <div className="asset-composition-list">
-              <p>
-                <b className="green-dot" /> Cash <span>63.2%</span>
-              </p>
-              <p>
-                <b className="blue-dot" /> Positions <span>33.5%</span>
-              </p>
-              <p>
-                <b className="gray-dot" /> Others <span>3.3%</span>
-              </p>
-            </div>
-          </section>
-        </aside>
       </main>
     </div>
   );

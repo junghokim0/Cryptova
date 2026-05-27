@@ -1,7 +1,8 @@
+import AssetSummary from "../components/AssetSummary";
 import { useEffect, useMemo, useState } from "react";
 import "../styles/HistoryPage.css";
 import logo from "../assets/logo.png";
-import { createMockSignal, getSignals } from "../api/signalApi";
+import { getTradingRuns } from "../api/tradingApi";
 
 function formatDateTime(value) {
   if (!value) return "-";
@@ -17,13 +18,48 @@ function formatDateTime(value) {
   return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
 }
 
-function formatPrice(value) {
+function formatNumber(value, digits = 4) {
   if (value === null || value === undefined) return "-";
 
   return Number(value).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   });
+}
+
+function getActionLabel(action) {
+  if (action === "SKIPPED_SIGNAL") return "Signal Skipped";
+  if (action === "PAPER_ORDER_OPENED") return "Paper Entry";
+  if (action === "SKIPPED_HOLDING") return "Holding";
+  if (action === "CLOSED_POSITION") return "Position Closed";
+  if (action === "DRY_RUN_ORDER") return "Dry Run";
+  if (action === "REAL_ORDER_SUBMITTED") return "Real Order";
+  if (action === "ORDER_FAILED") return "Order Failed";
+
+  return action || "-";
+}
+
+function getStatusClass(run) {
+  if (!run) return "closed";
+
+  if (run.action === "PAPER_ORDER_OPENED") return "holding";
+  if (run.action === "SKIPPED_HOLDING") return "holding";
+  if (run.action === "CLOSED_POSITION") return "closed";
+  if (run.action === "ORDER_FAILED") return "stopped";
+
+  return "closed";
+}
+
+function getSignalClass(signal) {
+  if (signal === "LONG") return "long";
+  if (signal === "SHORT") return "short";
+  return "hold";
+}
+
+function getSignalArrow(signal) {
+  if (signal === "SHORT") return "↓";
+  if (signal === "LONG") return "↑";
+  return "–";
 }
 
 function HistoryPage({
@@ -34,21 +70,21 @@ function HistoryPage({
   onGoLogin,
   onLogout,
 }) {
-  const [signals, setSignals] = useState([]);
+  const [runs, setRuns] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
 
   const [isLoading, setIsLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
 
-  const selectedSignal = useMemo(() => {
-    if (signals.length === 0) return null;
+  const selectedRun = useMemo(() => {
+    if (runs.length === 0) return null;
 
-    return signals.find((signal) => signal.id === selectedId) || signals[0];
-  }, [signals, selectedId]);
+    return runs.find((run) => run.id === selectedId) || runs[0];
+  }, [runs, selectedId]);
 
-  const loadSignals = async () => {
+  const loadTradingRuns = async () => {
     if (!user) {
-      setHistoryError("Please login to view signal history.");
+      setHistoryError("Please login to view trading history.");
       return;
     }
 
@@ -56,40 +92,22 @@ function HistoryPage({
       setIsLoading(true);
       setHistoryError("");
 
-      const data = await getSignals();
+      const data = await getTradingRuns({ limit: 50 });
 
-      setSignals(data);
+      setRuns(data);
 
       if (data.length > 0) {
         setSelectedId((prev) => prev || data[0].id);
       }
     } catch (error) {
-      setHistoryError(error.message || "Failed to load signal history.");
+      setHistoryError(error.message || "Failed to load trading history.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleCreateMockSignal = async () => {
-    if (!user) {
-      setHistoryError("Please login before creating a signal.");
-      return;
-    }
-
-    try {
-      setHistoryError("");
-
-      const created = await createMockSignal();
-
-      await loadSignals();
-      setSelectedId(created.id);
-    } catch (error) {
-      setHistoryError(error.message || "Failed to create mock signal.");
-    }
-  };
-
   useEffect(() => {
-    loadSignals();
+    loadTradingRuns();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
@@ -114,6 +132,8 @@ function HistoryPage({
           </button>
         </nav>
 
+        <AssetSummary user={user} />
+
         {user ? (
           <button type="button" className="history-login-button" onClick={onLogout}>
             <span>♙</span>
@@ -132,88 +152,98 @@ function HistoryPage({
           <div className="panel-title-row">
             <div className="title-left">
               <div className="history-title-icon refresh-icon" />
-              <h2>AI Signal History</h2>
+              <h2>Auto Trading History</h2>
             </div>
 
-            <select className="coin-filter" value="all" onChange={() => {}}>
-              <option value="all">All Coins</option>
+            <select className="coin-filter" value="BTCUSDT" onChange={() => {}}>
+              <option value="BTCUSDT">BTCUSDT</option>
             </select>
           </div>
 
           <button
             type="button"
             className="mock-signal-button"
-            onClick={handleCreateMockSignal}
+            onClick={loadTradingRuns}
+            disabled={isLoading}
           >
-            + Create Mock Signal
+            {isLoading ? "Loading..." : "Refresh Trading Runs"}
           </button>
 
           {historyError && <p className="history-error-message">{historyError}</p>}
 
-          {isLoading && <p className="history-loading-message">Loading signals...</p>}
+          {isLoading && (
+            <p className="history-loading-message">Loading trading runs...</p>
+          )}
 
           <div className="signal-list">
-            {!isLoading && signals.length === 0 && (
+            {!isLoading && runs.length === 0 && (
               <div className="empty-history-box">
-                <h3>No signals yet</h3>
-                <p>Create a mock signal first. Later, AI-generated signals will appear here.</p>
+                <h3>No trading runs yet</h3>
+                <p>
+                  Start auto trading or click Run Once on the Trading page.
+                  Execution logs will appear here.
+                </p>
               </div>
             )}
 
-            {signals.map((signal) => (
+            {runs.map((run) => (
               <button
-                key={signal.id}
+                key={run.id}
                 type="button"
                 className={
-                  selectedSignal?.id === signal.id
+                  selectedRun?.id === run.id
                     ? "history-signal-card selected"
                     : "history-signal-card"
                 }
-                onClick={() => setSelectedId(signal.id)}
+                onClick={() => setSelectedId(run.id)}
               >
                 <div className="signal-card-top">
                   <div className="coin-left">
-                    <span className={`signal-badge ${signal.signal.toLowerCase()}`}>
-                      {signal.signal}
+                    <span
+                      className={`signal-badge ${getSignalClass(run.signal)}`}
+                    >
+                      {run.signal || "-"}
                     </span>
                     <span className="coin-icon">₿</span>
-                    <strong>{signal.symbol}</strong>
+                    <strong>{run.symbol}</strong>
                   </div>
 
                   <div className="signal-confidence">
-                    <span>Confidence</span>
-                    <strong className={signal.signal.toLowerCase()}>
-                      {Math.round(signal.confidence)}%
+                    <span>Action</span>
+                    <strong className={getSignalClass(run.signal)}>
+                      {getActionLabel(run.action)}
                     </strong>
                   </div>
 
-                  <span className={`status-pill ${signal.status.toLowerCase()}`}>
-                    {signal.status}
+                  <span className={`status-pill ${getStatusClass(run)}`}>
+                    {run.position_status || run.order_status || "LOG"}
                   </span>
                 </div>
 
                 <div className="signal-card-bottom">
-                  <span>{formatDateTime(signal.created_at)}</span>
+                  <span>{formatDateTime(run.executed_at)}</span>
 
                   <div>
-                    <p>Entry Price</p>
-                    <strong>{formatPrice(signal.entry_price)}</strong>
+                    <p>Order Status</p>
+                    <strong>{run.order_status || "-"}</strong>
                   </div>
 
-                  {signal.result && (
-                    <div>
-                      <p>Result</p>
-                      <strong
-                        className={
-                          signal.result.startsWith("+")
-                            ? "result-positive"
-                            : "result-negative"
-                        }
-                      >
-                        {signal.result}
-                      </strong>
-                    </div>
-                  )}
+                  <div>
+                    <p>PnL</p>
+                    <strong
+                      className={
+                        run.pnl > 0
+                          ? "result-positive"
+                          : run.pnl < 0
+                          ? "result-negative"
+                          : ""
+                      }
+                    >
+                      {run.pnl !== null && run.pnl !== undefined
+                        ? formatNumber(run.pnl, 4)
+                        : "-"}
+                    </strong>
+                  </div>
                 </div>
               </button>
             ))}
@@ -234,105 +264,95 @@ function HistoryPage({
                 <span />
                 <span />
               </div>
-              <h2>AI Trade Explanation</h2>
+              <h2>Trading Run Detail</h2>
             </div>
 
             <p className="updated-time">
               ⟳ Last updated:{" "}
-              {selectedSignal ? formatDateTime(selectedSignal.created_at) : "-"}
+              {selectedRun ? formatDateTime(selectedRun.executed_at) : "-"}
             </p>
           </div>
 
-          {!selectedSignal ? (
+          {!selectedRun ? (
             <div className="empty-explanation-box">
-              <h3>No signal selected</h3>
+              <h3>No run selected</h3>
               <p>
-                Create or select an AI signal to view explanation details.
+                Run auto trading once or start scheduler to view execution logs.
               </p>
             </div>
           ) : (
             <>
               <section className="selected-summary">
-                <div className={`summary-arrow ${selectedSignal.signal.toLowerCase()}`}>
-                  {selectedSignal.signal === "SHORT" ? "↓" : "↑"}
+                <div className={`summary-arrow ${getSignalClass(selectedRun.signal)}`}>
+                  {getSignalArrow(selectedRun.signal)}
                 </div>
 
                 <div className="summary-main">
-                  <p>Selected Signal</p>
+                  <p>Selected Run</p>
                   <h3>
-                    <span className={selectedSignal.signal.toLowerCase()}>
-                      {selectedSignal.signal}
+                    <span className={getSignalClass(selectedRun.signal)}>
+                      {selectedRun.signal || "-"}
                     </span>{" "}
-                    {selectedSignal.symbol}
+                    {selectedRun.symbol}
                   </h3>
                 </div>
 
                 <div className="summary-stat">
-                  <p>Confidence</p>
-                  <strong>{Math.round(selectedSignal.confidence)}%</strong>
+                  <p>Action</p>
+                  <strong>{getActionLabel(selectedRun.action)}</strong>
                 </div>
 
                 <div className="summary-stat">
-                  <p>Entry Price</p>
-                  <strong>{formatPrice(selectedSignal.entry_price)}</strong>
+                  <p>Order</p>
+                  <strong>{selectedRun.order_status || "-"}</strong>
                 </div>
 
                 <div className="summary-stat">
-                  <p>Signal Time</p>
-                  <strong>{formatDateTime(selectedSignal.created_at)}</strong>
+                  <p>Position</p>
+                  <strong>{selectedRun.position_status || "-"}</strong>
                 </div>
 
                 <div className="summary-stat">
-                  <p>Status</p>
-                  <strong className="strategy-pill">{selectedSignal.status}</strong>
+                  <p>Run Time</p>
+                  <strong>{formatDateTime(selectedRun.executed_at)}</strong>
                 </div>
               </section>
 
               <div className="explanation-grid">
                 <section className="analysis-column">
-                  <article className="analysis-card green-card">
-                    <div className="analysis-title">
-                      <div className="mini-icon news-icon" />
-                      <h3>
-                        <span>1</span> News Analysis
-                      </h3>
-                      <b>Market Context</b>
-                    </div>
-
-                    <ul>
-                      <li>
-                        {selectedSignal.news_summary ||
-                          "Temporary news explanation will be replaced by AI API output."}
-                      </li>
-                      <li>
-                        This section will later summarize real-time market news.
-                      </li>
-                      <li>
-                        News sentiment and keyword context can be shown here.
-                      </li>
-                    </ul>
-                  </article>
-
                   <article className="analysis-card blue-card">
                     <div className="analysis-title">
                       <div className="mini-icon chart-icon-small" />
                       <h3>
-                        <span>2</span> Chart Analysis
+                        <span>1</span> Execution Summary
                       </h3>
-                      <b>Chart Signal</b>
+                      <b>{getActionLabel(selectedRun.action)}</b>
+                    </div>
+
+                    <p>{selectedRun.message || "No message recorded."}</p>
+
+                    <p>
+                      This log was generated by the automated trading cycle.
+                      It records whether the system opened a paper position,
+                      skipped a signal, held an existing position, or closed a
+                      position.
+                    </p>
+                  </article>
+
+                  <article className="analysis-card green-card">
+                    <div className="analysis-title">
+                      <div className="mini-icon news-icon" />
+                      <h3>
+                        <span>2</span> Signal / Order Info
+                      </h3>
+                      <b>Trading Flow</b>
                     </div>
 
                     <ul>
-                      <li>
-                        {selectedSignal.chart_summary ||
-                          "Temporary chart explanation will be replaced by model output."}
-                      </li>
-                      <li>
-                        Technical indicators and model confidence can be shown here.
-                      </li>
-                      <li>
-                        Future integration can include trend, volatility, and momentum.
-                      </li>
+                      <li>Signal ID: {selectedRun.signal_id || "-"}</li>
+                      <li>Signal: {selectedRun.signal || "-"}</li>
+                      <li>Order ID: {selectedRun.order_id || "-"}</li>
+                      <li>Order Status: {selectedRun.order_status || "-"}</li>
                     </ul>
                   </article>
 
@@ -340,38 +360,49 @@ function HistoryPage({
                     <div className="analysis-title">
                       <div className="mini-icon filter-icon" />
                       <h3>
-                        <span>3</span> Market Filters
+                        <span>3</span> Position Result
                       </h3>
-                      <b>Risk Review</b>
+                      <b>Paper Engine</b>
                     </div>
 
                     <ul className="check-list">
+                      <li>Position ID: {selectedRun.position_id || "-"}</li>
                       <li>
-                        {selectedSignal.filter_summary ||
-                          "Default funding and volatility risk filter was reviewed."}
+                        Position Status: {selectedRun.position_status || "-"}
                       </li>
-                      <li>Confidence threshold condition checked</li>
-                      <li>Holding strategy: 24h Fixed</li>
+                      <li>
+                        PnL:{" "}
+                        {selectedRun.pnl !== null &&
+                        selectedRun.pnl !== undefined
+                          ? formatNumber(selectedRun.pnl, 4)
+                          : "-"}
+                      </li>
+                      <li>
+                        PnL %:{" "}
+                        {selectedRun.pnl_pct !== null &&
+                        selectedRun.pnl_pct !== undefined
+                          ? `${formatNumber(selectedRun.pnl_pct, 4)}%`
+                          : "-"}
+                      </li>
                     </ul>
                   </article>
 
                   <article className="analysis-card yellow-card">
                     <div className="analysis-title">
                       <div className="mini-icon decision-icon" />
-                      <h3>AI Decision</h3>
+                      <h3>System Decision</h3>
                     </div>
 
                     <p>
-                      {selectedSignal.reason_summary ||
-                        "This is a temporary AI decision explanation. Later, this text will be generated from the AI explanation API."}
+                      The system action for this run was{" "}
+                      <strong>{getActionLabel(selectedRun.action)}</strong>.
                     </p>
 
                     <p>
-                      Current decision:{" "}
-                      <strong className={selectedSignal.signal.toLowerCase()}>
-                        {selectedSignal.signal} signal
-                      </strong>{" "}
-                      with {Math.round(selectedSignal.confidence)}% confidence.
+                      If the signal was HOLD, no order was executed. If an open
+                      position existed, the 24h fixed holding logic prevented
+                      duplicate entries. If the holding time expired, the paper
+                      position was closed and PnL was recorded.
                     </p>
                   </article>
                 </section>
@@ -381,51 +412,89 @@ function HistoryPage({
                     <h3>▣ Key Facts</h3>
 
                     <div className="fact-row">
-                      <span>Current Price</span>
-                      <strong>{formatPrice(selectedSignal.entry_price)} USDT</strong>
+                      <span>Symbol</span>
+                      <strong>{selectedRun.symbol}</strong>
                     </div>
+
                     <div className="fact-row">
                       <span>Signal</span>
-                      <strong className={selectedSignal.signal.toLowerCase()}>
-                        {selectedSignal.signal}
+                      <strong className={getSignalClass(selectedRun.signal)}>
+                        {selectedRun.signal || "-"}
                       </strong>
                     </div>
+
                     <div className="fact-row">
-                      <span>Confidence</span>
-                      <strong>{Math.round(selectedSignal.confidence)}%</strong>
+                      <span>Action</span>
+                      <strong>{getActionLabel(selectedRun.action)}</strong>
                     </div>
+
                     <div className="fact-row">
-                      <span>Status</span>
-                      <strong>{selectedSignal.status}</strong>
+                      <span>Order Status</span>
+                      <strong>{selectedRun.order_status || "-"}</strong>
                     </div>
+
                     <div className="fact-row">
-                      <span>Result</span>
-                      <strong>{selectedSignal.result || "-"}</strong>
+                      <span>Position Status</span>
+                      <strong>{selectedRun.position_status || "-"}</strong>
                     </div>
+
                     <div className="fact-row">
-                      <span>AI Model</span>
-                      <strong>Temporary Mock</strong>
+                      <span>PnL</span>
+                      <strong
+                        className={
+                          selectedRun.pnl > 0
+                            ? "positive"
+                            : selectedRun.pnl < 0
+                            ? "result-negative"
+                            : ""
+                        }
+                      >
+                        {selectedRun.pnl !== null &&
+                        selectedRun.pnl !== undefined
+                          ? formatNumber(selectedRun.pnl, 4)
+                          : "-"}
+                      </strong>
+                    </div>
+
+                    <div className="fact-row">
+                      <span>PnL %</span>
+                      <strong
+                        className={
+                          selectedRun.pnl_pct > 0
+                            ? "positive"
+                            : selectedRun.pnl_pct < 0
+                            ? "result-negative"
+                            : ""
+                        }
+                      >
+                        {selectedRun.pnl_pct !== null &&
+                        selectedRun.pnl_pct !== undefined
+                          ? `${formatNumber(selectedRun.pnl_pct, 4)}%`
+                          : "-"}
+                      </strong>
                     </div>
                   </section>
 
                   <section className="risk-note-card">
-                    <h3>⚠ Risk Note</h3>
+                    <h3>⚠ Paper Trading Note</h3>
                     <p>
-                      Markets are volatile and AI predictions are not guaranteed.
-                      Always manage your risk before entering a trade.
+                      This history is based on paper execution. It does not mean
+                      a real exchange order was filled. The purpose is to verify
+                      the trading engine flow safely.
                     </p>
                   </section>
 
                   <section className="info-card">
-                    <h3>ⓘ Explanation</h3>
+                    <h3>ⓘ Execution Log</h3>
                     <p>
-                      This signal explanation is currently shown with placeholder
-                      data. Later, it can be generated through an AI explanation API.
+                      The history log stores each automated trading cycle,
+                      including skipped HOLD signals, paper entries, holding
+                      skips, position closes, and PnL results.
                     </p>
 
                     <p>
-                      Model inputs may include news sentiment, chart indicators,
-                      funding rate, open interest, volatility, and post-trade filters.
+                      This data can be used for UI monitoring, debugging,
+                      presentation, and later performance evaluation.
                     </p>
                   </section>
                 </aside>
