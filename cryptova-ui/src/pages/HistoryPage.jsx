@@ -27,29 +27,6 @@ function formatNumber(value, digits = 4) {
   });
 }
 
-function getActionLabel(action) {
-  if (action === "SKIPPED_SIGNAL") return "Signal Skipped";
-  if (action === "PAPER_ORDER_OPENED") return "Paper Entry";
-  if (action === "SKIPPED_HOLDING") return "Holding";
-  if (action === "CLOSED_POSITION") return "Position Closed";
-  if (action === "DRY_RUN_ORDER") return "Dry Run";
-  if (action === "REAL_ORDER_SUBMITTED") return "Real Order";
-  if (action === "ORDER_FAILED") return "Order Failed";
-
-  return action || "-";
-}
-
-function getStatusClass(run) {
-  if (!run) return "closed";
-
-  if (run.action === "PAPER_ORDER_OPENED") return "holding";
-  if (run.action === "SKIPPED_HOLDING") return "holding";
-  if (run.action === "CLOSED_POSITION") return "closed";
-  if (run.action === "ORDER_FAILED") return "stopped";
-
-  return "closed";
-}
-
 function getSignalClass(signal) {
   if (signal === "LONG") return "long";
   if (signal === "SHORT") return "short";
@@ -62,8 +39,197 @@ function getSignalArrow(signal) {
   return "–";
 }
 
+function getDisplayAction(run) {
+  if (!run) return "-";
+
+  const signal = run.signal;
+
+  if (run.action === "PAPER_ORDER_OPENED") {
+    if (signal === "LONG") return "LONG Entry";
+    if (signal === "SHORT") return "SHORT Entry";
+    return "Entry";
+  }
+
+  if (run.action === "REAL_ORDER_SUBMITTED") {
+    if (signal === "LONG") return "LONG Entry";
+    if (signal === "SHORT") return "SHORT Entry";
+    return "Entry";
+  }
+
+  if (run.action === "DRY_RUN_ORDER") {
+    if (signal === "LONG") return "LONG Test";
+    if (signal === "SHORT") return "SHORT Test";
+    return "Test Entry";
+  }
+
+  if (run.action === "SKIPPED_HOLDING") return "Holding";
+  if (run.action === "SKIPPED_SIGNAL") return "Signal Skipped";
+  if (run.action === "CLOSED_POSITION") return "Position Closed";
+  if (run.action === "ORDER_FAILED") return "Order Failed";
+
+  return run.action || "-";
+}
+
+function getDisplayOrderStatus(status) {
+  if (!status) return "-";
+
+  if (status === "PAPER_SUBMITTED") return "OPEN";
+  if (status === "SUBMITTED") return "OPEN";
+  if (status === "PAPER_CLOSED") return "CLOSED";
+  if (status === "CLOSED") return "CLOSED";
+  if (status === "DRY_RUN") return "TEST";
+  if (status === "SKIPPED") return "SKIPPED";
+  if (status === "FAILED") return "FAILED";
+
+  return status;
+}
+
+function getDisplayPositionStatus(status) {
+  if (!status) return "-";
+  if (status === "OPEN") return "OPEN";
+  if (status === "CLOSED") return "CLOSED";
+  return status;
+}
+
+function getDisplayEngineLabel(run) {
+  if (!run) return "Trading Engine";
+
+  if (run.order_status === "DRY_RUN") {
+    return "Test Engine";
+  }
+
+  if (run.order_status === "SUBMITTED") {
+    return "Exchange Engine";
+  }
+
+  if (
+    run.order_status === "PAPER_SUBMITTED" ||
+    run.order_status === "PAPER_CLOSED" ||
+    run.message?.toLowerCase().includes("paper")
+  ) {
+    return "Paper Engine";
+  }
+
+  return "Trading Engine";
+}
+
+function getDisplayExecutionMessage(run) {
+  if (!run) return "-";
+
+  if (run.action === "PAPER_ORDER_OPENED") {
+    if (run.signal === "LONG") {
+      return "A LONG paper position was opened successfully. Since no exchange order was filled, the trade was recorded in the paper trading engine for safe strategy verification.";
+    }
+
+    if (run.signal === "SHORT") {
+      return "A SHORT paper position was opened successfully. Since no exchange order was filled, the trade was recorded in the paper trading engine for safe strategy verification.";
+    }
+
+    return "A paper position was opened successfully for strategy verification.";
+  }
+
+  if (run.action === "REAL_ORDER_SUBMITTED") {
+    if (run.signal === "LONG") {
+      return "A LONG position entry was submitted successfully.";
+    }
+
+    if (run.signal === "SHORT") {
+      return "A SHORT position entry was submitted successfully.";
+    }
+
+    return "A position entry was submitted successfully.";
+  }
+
+  if (run.action === "SKIPPED_HOLDING") {
+    return "An open position already exists, so the system kept the current position instead of opening a duplicate trade.";
+  }
+
+  if (run.action === "SKIPPED_SIGNAL") {
+    return "The final signal was HOLD, so no new position was opened.";
+  }
+
+  if (run.action === "CLOSED_POSITION") {
+    return "The 24-hour holding period expired, so the system closed the position and recorded the realized PnL.";
+  }
+
+  if (run.action === "DRY_RUN_ORDER") {
+    return "This was a test execution. The system verified the trading flow without using exchange execution.";
+  }
+
+  if (run.action === "ORDER_FAILED") {
+    return run.message || "The order failed during execution.";
+  }
+
+  return run.message || "Trading run completed.";
+}
+
+function getDisplaySystemDecision(run) {
+  if (!run) return "-";
+
+  if (run.action === "PAPER_ORDER_OPENED") {
+    return `The system opened a ${run.signal || ""} position for this run. The signal passed the configured checks, so the paper trading engine recorded an OPEN position.`;
+  }
+
+  if (run.action === "REAL_ORDER_SUBMITTED") {
+    return `The system submitted a ${run.signal || ""} position entry to the exchange engine.`;
+  }
+
+  if (run.action === "SKIPPED_HOLDING") {
+    return "The system kept the current open position because the 24-hour fixed holding period has not expired yet.";
+  }
+
+  if (run.action === "SKIPPED_SIGNAL") {
+    return "The system did not open a position because the final signal was HOLD.";
+  }
+
+  if (run.action === "CLOSED_POSITION") {
+    return "The system closed the position because the 24-hour fixed holding period expired.";
+  }
+
+  if (run.action === "DRY_RUN_ORDER") {
+    return "The system executed a test run to verify the trading flow without using exchange execution.";
+  }
+
+  if (run.action === "ORDER_FAILED") {
+    return "The system attempted to process the order, but execution failed.";
+  }
+
+  return `The system action for this run was ${getDisplayAction(run)}.`;
+}
+
+function getStatusClass(run) {
+  if (!run) return "closed";
+
+  if (run.action === "PAPER_ORDER_OPENED") return "holding";
+  if (run.action === "REAL_ORDER_SUBMITTED") return "holding";
+  if (run.action === "SKIPPED_HOLDING") return "holding";
+  if (run.action === "CLOSED_POSITION") return "closed";
+  if (run.action === "ORDER_FAILED") return "stopped";
+
+  return "closed";
+}
+
+function getDisplayRunStatus(run) {
+  if (!run) return "LOG";
+
+  const positionStatus = getDisplayPositionStatus(run.position_status);
+
+  if (positionStatus !== "-") {
+    return positionStatus;
+  }
+
+  const orderStatus = getDisplayOrderStatus(run.order_status);
+
+  if (orderStatus !== "-") {
+    return orderStatus;
+  }
+
+  return "LOG";
+}
+
 function HistoryPage({
   user,
+  selectedRunId,
   onGoHome,
   onGoTrading,
   onGoBacktest,
@@ -97,7 +263,12 @@ function HistoryPage({
       setRuns(data);
 
       if (data.length > 0) {
-        setSelectedId((prev) => prev || data[0].id);
+        if (selectedRunId) {
+          const exists = data.some((run) => run.id === selectedRunId);
+          setSelectedId(exists ? selectedRunId : data[0].id);
+        } else {
+          setSelectedId((prev) => prev || data[0].id);
+        }
       }
     } catch (error) {
       setHistoryError(error.message || "Failed to load trading history.");
@@ -109,7 +280,7 @@ function HistoryPage({
   useEffect(() => {
     loadTradingRuns();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, selectedRunId]);
 
   return (
     <div className="history-page">
@@ -211,12 +382,12 @@ function HistoryPage({
                   <div className="signal-confidence">
                     <span>Action</span>
                     <strong className={getSignalClass(run.signal)}>
-                      {getActionLabel(run.action)}
+                      {getDisplayAction(run)}
                     </strong>
                   </div>
 
                   <span className={`status-pill ${getStatusClass(run)}`}>
-                    {run.position_status || run.order_status || "LOG"}
+                    {getDisplayRunStatus(run)}
                   </span>
                 </div>
 
@@ -225,7 +396,7 @@ function HistoryPage({
 
                   <div>
                     <p>Order Status</p>
-                    <strong>{run.order_status || "-"}</strong>
+                    <strong>{getDisplayOrderStatus(run.order_status)}</strong>
                   </div>
 
                   <div>
@@ -299,17 +470,19 @@ function HistoryPage({
 
                 <div className="summary-stat">
                   <p>Action</p>
-                  <strong>{getActionLabel(selectedRun.action)}</strong>
+                  <strong>{getDisplayAction(selectedRun)}</strong>
                 </div>
 
                 <div className="summary-stat">
                   <p>Order</p>
-                  <strong>{selectedRun.order_status || "-"}</strong>
+                  <strong>{getDisplayOrderStatus(selectedRun.order_status)}</strong>
                 </div>
 
                 <div className="summary-stat">
                   <p>Position</p>
-                  <strong>{selectedRun.position_status || "-"}</strong>
+                  <strong>
+                    {getDisplayPositionStatus(selectedRun.position_status)}
+                  </strong>
                 </div>
 
                 <div className="summary-stat">
@@ -326,16 +499,15 @@ function HistoryPage({
                       <h3>
                         <span>1</span> Execution Summary
                       </h3>
-                      <b>{getActionLabel(selectedRun.action)}</b>
+                      <b>{getDisplayAction(selectedRun)}</b>
                     </div>
 
-                    <p>{selectedRun.message || "No message recorded."}</p>
+                    <p>{getDisplayExecutionMessage(selectedRun)}</p>
 
                     <p>
                       This log was generated by the automated trading cycle.
-                      It records whether the system opened a paper position,
-                      skipped a signal, held an existing position, or closed a
-                      position.
+                      It records whether the system opened a position, skipped a
+                      signal, held an existing position, or closed a position.
                     </p>
                   </article>
 
@@ -352,7 +524,10 @@ function HistoryPage({
                       <li>Signal ID: {selectedRun.signal_id || "-"}</li>
                       <li>Signal: {selectedRun.signal || "-"}</li>
                       <li>Order ID: {selectedRun.order_id || "-"}</li>
-                      <li>Order Status: {selectedRun.order_status || "-"}</li>
+                      <li>
+                        Order Status:{" "}
+                        {getDisplayOrderStatus(selectedRun.order_status)}
+                      </li>
                     </ul>
                   </article>
 
@@ -362,13 +537,14 @@ function HistoryPage({
                       <h3>
                         <span>3</span> Position Result
                       </h3>
-                      <b>Paper Engine</b>
+                      <b>{getDisplayEngineLabel(selectedRun)}</b>
                     </div>
 
                     <ul className="check-list">
                       <li>Position ID: {selectedRun.position_id || "-"}</li>
                       <li>
-                        Position Status: {selectedRun.position_status || "-"}
+                        Position Status:{" "}
+                        {getDisplayPositionStatus(selectedRun.position_status)}
                       </li>
                       <li>
                         PnL:{" "}
@@ -393,17 +569,7 @@ function HistoryPage({
                       <h3>System Decision</h3>
                     </div>
 
-                    <p>
-                      The system action for this run was{" "}
-                      <strong>{getActionLabel(selectedRun.action)}</strong>.
-                    </p>
-
-                    <p>
-                      If the signal was HOLD, no order was executed. If an open
-                      position existed, the 24h fixed holding logic prevented
-                      duplicate entries. If the holding time expired, the paper
-                      position was closed and PnL was recorded.
-                    </p>
+                    <p>{getDisplaySystemDecision(selectedRun)}</p>
                   </article>
                 </section>
 
@@ -425,17 +591,21 @@ function HistoryPage({
 
                     <div className="fact-row">
                       <span>Action</span>
-                      <strong>{getActionLabel(selectedRun.action)}</strong>
+                      <strong>{getDisplayAction(selectedRun)}</strong>
                     </div>
 
                     <div className="fact-row">
                       <span>Order Status</span>
-                      <strong>{selectedRun.order_status || "-"}</strong>
+                      <strong>
+                        {getDisplayOrderStatus(selectedRun.order_status)}
+                      </strong>
                     </div>
 
                     <div className="fact-row">
                       <span>Position Status</span>
-                      <strong>{selectedRun.position_status || "-"}</strong>
+                      <strong>
+                        {getDisplayPositionStatus(selectedRun.position_status)}
+                      </strong>
                     </div>
 
                     <div className="fact-row">

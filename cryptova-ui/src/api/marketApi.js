@@ -14,7 +14,11 @@ async function request(url) {
   });
 
   if (!response.ok) {
-    throw new Error(`Market API 요청 실패: ${response.status}`);
+    const errorData = await response.json().catch(() => null);
+
+    throw new Error(
+      errorData?.detail || `Market API 요청 실패: ${response.status}`
+    );
   }
 
   return response.json();
@@ -23,10 +27,22 @@ async function request(url) {
 export async function getCandles({
   symbol = "BTCUSDT",
   interval = "60",
-  limit = 200,
   category = "linear",
+  startDate = "2020-03-01",
+  endDate = null,
+  pageLimit = 1000,
 } = {}) {
-  return request(
-    `/market/candles?symbol=${symbol}&interval=${interval}&limit=${limit}&category=${category}`
-  );
+  const params = new URLSearchParams();
+
+  params.set("symbol", symbol);
+  params.set("interval", interval);
+  params.set("category", category);
+  params.set("start_date", startDate);
+  params.set("page_limit", String(pageLimit));
+
+  if (endDate) {
+    params.set("end_date", endDate);
+  }
+
+  return request(`/market/candles?${params.toString()}`);
 }

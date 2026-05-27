@@ -128,7 +128,7 @@
 
 .history-layout {
   display: grid;
-  grid-template-columns: 560px 1fr;
+  grid-template-columns: 600px 1fr;
   gap: 18px;
   padding-top: 20px;
   height: calc(100vh - 94px);
@@ -740,9 +740,26 @@
 /* Responsive */
 
 @media (max-width: 1280px) {
+  .history-page {
+    overflow-y: auto;
+  }
+
   .history-layout {
     grid-template-columns: 1fr;
     height: auto;
+    overflow: visible;
+  }
+
+  .signal-history-panel,
+  .trade-explanation-panel {
+    height: auto;
+    min-height: auto;
+    overflow: visible;
+  }
+
+  .signal-list {
+    max-height: 520px;
+    overflow-y: auto;
   }
 
   .signal-history-panel,
@@ -777,9 +794,11 @@
     padding: 0 12px;
   }
 
-  .signal-card-top,
-  .signal-card-bottom {
-    grid-template-columns: 1fr;
+  .signal-card-top {
+    display: grid;
+    grid-template-columns: 1fr 190px 88px;
+    align-items: center;
+    gap: 12px;
   }
 
   .selected-summary {
@@ -867,4 +886,60 @@
 .summary-arrow.hold {
   background: #facc15;
   color: #020617;
+}
+/* ===== Fix: History left list scroll ===== */
+
+.history-page {
+  height: 100vh;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.history-layout {
+  height: calc(100vh - 94px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.signal-history-panel {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.trade-explanation-panel {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.signal-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 8px;
+  padding-bottom: 18px;
+}
+
+/* scrollbar style */
+.signal-list::-webkit-scrollbar,
+.trade-explanation-panel::-webkit-scrollbar {
+  width: 7px;
+}
+
+.signal-list::-webkit-scrollbar-track,
+.trade-explanation-panel::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 999px;
+}
+
+.signal-list::-webkit-scrollbar-thumb,
+.trade-explanation-panel::-webkit-scrollbar-thumb {
+  background: rgba(37, 99, 235, 0.55);
+  border-radius: 999px;
+}
+
+.signal-list::-webkit-scrollbar-thumb:hover,
+.trade-explanation-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(96, 165, 250, 0.85);
 }

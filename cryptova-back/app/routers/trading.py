@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-
+from sqlalchemy.exc import IntegrityError
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -145,23 +145,50 @@ def to_unix_seconds(dt: datetime | None) -> int | None:
 
     return int(dt.timestamp())
 
-def get_or_create_strategy_setting(
-    db: Session,
-    user_id: int,
-) -> StrategySetting:
+def get_or_create_strategy_setting(db: Session, user_id: int) -> StrategySetting:
     setting = (
         db.query(StrategySetting)
         .filter(StrategySetting.user_id == user_id)
         .first()
     )
 
-    if setting is None:
-        setting = StrategySetting(user_id=user_id)
-        db.add(setting)
+    if setting:
+        return setting
+
+    setting = StrategySetting(
+        user_id=user_id,
+        exchange="Bybit",
+        symbol="BTCUSDT",
+        confidence_threshold=46.0,
+        holding_strategy="24h Fixed",
+        auto_trading_enabled=False,
+        position_size=1.0,
+        leverage=1,
+        max_drawdown_stop=-10.0,
+        funding_threshold=0.0001,
+        volatility_threshold=0.015,
+    )
+
+    db.add(setting)
+
+    try:
         db.commit()
         db.refresh(setting)
+        return setting
 
-    return setting
+    except IntegrityError:
+        db.rollback()
+
+        setting = (
+            db.query(StrategySetting)
+            .filter(StrategySetting.user_id == user_id)
+            .first()
+        )
+
+        if setting:
+            return setting
+
+        raise
 
 @router.post("/run-once", response_model=TradingRunOnceResponse)
 def run_trading_once(

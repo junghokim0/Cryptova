@@ -28,6 +28,7 @@ function TradingPage({
   onGoHome,
   onGoLogin,
   onGoHistory,
+  onGoHistoryDetail,
   onGoBacktest,
   onLogout,
 }) {
@@ -63,6 +64,37 @@ function TradingPage({
   const [tradingRuns, setTradingRuns] = useState([]);
   const [chartError, setChartError] = useState("");
   const [isChartLoading, setIsChartLoading] = useState(false);
+
+  const [selectedTimeframe, setSelectedTimeframe] = useState("1D");
+  const selectedTimeframeRef = useRef("1D");
+  const chartRequestIdRef = useRef(0);
+
+  const timeframeOptions = {
+    "1H": {
+      interval: "60",
+      startDate: "2026-04-27",
+    },
+    "4H": {
+      interval: "240",
+      startDate: "2025-11-27",
+    },
+    "1D": {
+      interval: "D",
+      startDate: "2020-03-01",
+    },
+    "1W": {
+      interval: "W",
+      startDate: "2020-03-01",
+    },
+    "1M": {
+      interval: "M",
+      startDate: "2020-03-01",
+    },
+  };
+
+  useEffect(() => {
+    selectedTimeframeRef.current = selectedTimeframe;
+  }, [selectedTimeframe]);
 
   useEffect(() => {
     async function loadSettings() {
@@ -136,15 +168,17 @@ function TradingPage({
       chartRef.current.applyOptions({
         width: chartContainerRef.current.clientWidth,
       });
+
+      chartRef.current.timeScale().fitContent();
     };
 
     window.addEventListener("resize", handleResize);
 
-    loadChartData();
+    loadChartData("1D");
 
     const intervalId = setInterval(() => {
-      loadChartData();
-    }, 60000);
+      loadChartData(selectedTimeframeRef.current);
+    }, 300000);
 
     return () => {
       window.removeEventListener("resize", handleResize);
@@ -184,30 +218,52 @@ function TradingPage({
     }
   };
 
-  const loadChartData = async () => {
+  const loadChartData = async (timeframe = selectedTimeframeRef.current) => {
     if (!user) return;
+
+    const requestId = chartRequestIdRef.current + 1;
+    chartRequestIdRef.current = requestId;
 
     try {
       setIsChartLoading(true);
       setChartError("");
 
+      const selectedOption =
+        timeframeOptions[timeframe] || timeframeOptions["1D"];
+
       const candles = await getCandles({
         symbol: "BTCUSDT",
-        interval: "60",
-        limit: 200,
+        interval: selectedOption.interval,
         category: "linear",
+        startDate: selectedOption.startDate,
+        pageLimit: 1000,
       });
 
-      const candleData = candles.map((item) => ({
-        time: item.time,
-        open: item.open,
-        high: item.high,
-        low: item.low,
-        close: item.close,
-      }));
+      if (requestId !== chartRequestIdRef.current) return;
+
+      const candleData = candles
+        .map((item) => ({
+          time: item.time,
+          open: Number(item.open),
+          high: Number(item.high),
+          low: Number(item.low),
+          close: Number(item.close),
+        }))
+        .filter(
+          (item) =>
+            item.time &&
+            Number.isFinite(item.open) &&
+            Number.isFinite(item.high) &&
+            Number.isFinite(item.low) &&
+            Number.isFinite(item.close)
+        );
 
       if (candleSeriesRef.current) {
         candleSeriesRef.current.setData(candleData);
+
+        if (chartRef.current) {
+          chartRef.current.timeScale().fitContent();
+        }
       }
 
       if (candleData.length >= 2) {
@@ -226,6 +282,8 @@ function TradingPage({
         symbol: "BTCUSDT",
         limit: 100,
       });
+
+      if (requestId !== chartRequestIdRef.current) return;
 
       const entryMarkers = markers
         .filter((marker) => marker.price > 0)
@@ -277,19 +335,31 @@ function TradingPage({
         symbol: "BTCUSDT",
       });
 
+      if (requestId !== chartRequestIdRef.current) return;
+
       setPositionPnl(pnl);
 
       const runs = await getTradingRuns({
         limit: 10,
       });
 
+      if (requestId !== chartRequestIdRef.current) return;
+
       setTradingRuns(runs);
     } catch (error) {
       console.error(error);
       setChartError(error.message || "Failed to load chart data.");
     } finally {
-      setIsChartLoading(false);
+      if (requestId === chartRequestIdRef.current) {
+        setIsChartLoading(false);
+      }
     }
+  };
+
+  const handleTimeframeChange = (timeframe) => {
+    selectedTimeframeRef.current = timeframe;
+    setSelectedTimeframe(timeframe);
+    loadChartData(timeframe);
   };
 
   const handleUseRecommendedSettings = () => {
@@ -361,7 +431,7 @@ function TradingPage({
       setTradingMessage(result.message || "Auto trading started.");
 
       await loadAutoTradingStatus();
-      await loadChartData();
+      await loadChartData(selectedTimeframeRef.current);
     } catch (error) {
       setTradingError(error.message || "Failed to start auto trading.");
     } finally {
@@ -387,14 +457,23 @@ function TradingPage({
       setTradingMessage(result.message || "Auto trading stopped.");
 
       await loadAutoTradingStatus();
-      await loadChartData();
+      await loadChartData(selectedTimeframeRef.current);
     } catch (error) {
       setTradingError(error.message || "Failed to stop auto trading.");
     } finally {
       setIsChangingAutoTrading(false);
     }
   };
+  const handleGoExplanationHistory = () => {
+    if (tradingRuns.length > 0 && onGoHistoryDetail) {
+      onGoHistoryDetail(tradingRuns[0].id);
+      return;
+    }
 
+    if (onGoHistory) {
+      onGoHistory();
+    }
+  };
   const handleRunOnce = async () => {
     setTradingMessage("");
     setTradingError("");
@@ -412,12 +491,29 @@ function TradingPage({
       setTradingMessage(result.message || "Trading run completed.");
 
       await loadLatestSignal();
-      await loadChartData();
+      await loadChartData(selectedTimeframeRef.current);
     } catch (error) {
       setTradingError(error.message || "Failed to run trading.");
     } finally {
       setIsStartingTrading(false);
     }
+  };
+  const getRunActionLabel = (run) => {
+    if (!run) return "-";
+
+    if (run.action === "PAPER_ORDER_OPENED") {
+      if (run.signal === "LONG") return "LONG Entry";
+      if (run.signal === "SHORT") return "SHORT Entry";
+      return "Entry";
+    }
+
+    if (run.action === "CLOSED_POSITION") return "Position Closed";
+    if (run.action === "SKIPPED_HOLDING") return "Holding";
+    if (run.action === "SKIPPED_SIGNAL") return "Signal Skipped";
+    if (run.action === "DRY_RUN_ORDER") return "Test Entry";
+    if (run.action === "ORDER_FAILED") return "Order Failed";
+
+    return run.action || "-";
   };
 
   const formattedPrice =
@@ -792,13 +888,21 @@ function TradingPage({
           </div>
 
           <div className="time-filter">
-            <button>1H</button>
-            <button>4H</button>
-            <button className="selected">1D</button>
-            <button>1W</button>
-            <button>1M</button>
+            {["1H", "4H", "1D", "1W", "1M"].map((timeframe) => (
+              <button
+                key={timeframe}
+                type="button"
+                className={selectedTimeframe === timeframe ? "selected" : ""}
+                onClick={() => handleTimeframeChange(timeframe)}
+              >
+                {timeframe}
+              </button>
+            ))}
 
-            <button type="button" onClick={loadChartData}>
+            <button
+              type="button"
+              onClick={() => loadChartData(selectedTimeframeRef.current)}
+            >
               {isChartLoading ? "Loading..." : "Refresh"}
             </button>
           </div>
@@ -958,11 +1062,22 @@ function TradingPage({
 
           <section className="explanation-box">
             <div className="explanation-title">
-              <div className="explanation-icon chat-icon">
+              <button
+                type="button"
+                className="explanation-icon chat-icon explanation-link-button"
+                onClick={handleGoExplanationHistory}
+                title="View explanation history"
+              >
                 <span />
-              </div>
+              </button>
 
-              <h3>AI Trade Explanation</h3>
+              <button
+                type="button"
+                className="explanation-title-button"
+                onClick={handleGoExplanationHistory}
+              >
+                AI Trade Explanation
+              </button>
             </div>
 
             {latestSignal ? (
@@ -1014,7 +1129,7 @@ function TradingPage({
                 {tradingRuns.map((run) => (
                   <div className="trading-run-item" key={run.id}>
                     <div className="run-item-top">
-                      <strong>{run.action}</strong>
+                      <strong>{getRunActionLabel(run)}</strong>
                       <span>{run.signal || "-"}</span>
                     </div>
 

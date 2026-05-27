@@ -57,17 +57,29 @@ export async function getAutoTradingStatus() {
   return request("/trading/status");
 }
 
-export async function runTradingOnce({
-  symbol = "BTCUSDT",
-  dry_run = false,
-} = {}) {
-  return request("/trading/run-once", {
+export async function runTradingOnce() {
+  const token = localStorage.getItem("access_token");
+
+  const response = await fetch("http://127.0.0.1:8000/trading/run-once", {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
     body: JSON.stringify({
-      symbol,
-      dry_run,
+      symbol: "BTCUSDT",
+      dry_run: false,
     }),
   });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    console.error("runTradingOnce error:", data);
+    throw new Error(data?.detail || "Failed to run trading once.");
+  }
+
+  return data;
 }
 export async function getPaperPortfolioSummary(symbol = "BTCUSDT") {
   const token = localStorage.getItem("access_token");

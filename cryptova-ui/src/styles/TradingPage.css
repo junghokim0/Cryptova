@@ -1236,3 +1236,30 @@
   font-size: 12px;
   line-height: 1.6;
 }
+
+.explanation-link-button,
+.explanation-title-button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.explanation-link-button {
+  padding: 0;
+}
+
+.explanation-title-button {
+  color: #f8fafc;
+  font-size: 15px;
+  font-weight: 800;
+  text-align: left;
+}
+
+.explanation-title-button:hover {
+  color: #3b82f6;
+}
+
+.explanation-link-button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.2);
+}

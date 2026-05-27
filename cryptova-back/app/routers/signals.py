@@ -14,6 +14,8 @@ from app.routers.auth import get_current_user
 from app.schemas.signal_schema import AISignalCreateRequest, AISignalResponse
 from app.models.strategy_setting import StrategySetting
 
+import json
+import google.generativeai as genai
 
 # 현재 파일 위치:
 # cryptova-back/app/routers/signals.py
@@ -256,7 +258,124 @@ def build_chart_summary(market_ctx: dict) -> str:
         f"suggests {volatility_text} (std_24h={std_24h:.4f}). "
         f"The funding rate feature is {funding_rate:.6f}."
     )
+def build_fallback_summaries(ai_result: dict, risk_result: dict) -> dict:
+    market_ctx = load_latest_market_context()
 
+    return {
+        "reason_summary": build_reason_summary(
+            ai_result=ai_result,
+            risk_result=risk_result,
+            market_ctx=market_ctx,
+        ),
+        "news_summary": build_news_summary(market_ctx),
+        "chart_summary": build_chart_summary(market_ctx),
+        "filter_summary": risk_result["filter_summary"],
+    }
+
+
+def build_gemini_signal_summaries(
+    ai_result: dict,
+    risk_result: dict,
+    market_ctx: dict,
+) -> dict | None:
+    api_key = os.getenv("GEMINI_API_KEY")
+
+    if not api_key:
+        print("[GEMINI_EXPLANATION_ERROR] GEMINI_API_KEY is not set.")
+        return None
+
+    genai.configure(api_key=api_key)
+
+    prompt = f"""
+You are an AI trading explanation assistant for a crypto paper trading system.
+
+Write concise, user-friendly explanations for a BTCUSDT trading signal.
+Do not claim guaranteed profit.
+Do not give financial advice.
+Explain only why the system interpreted the current market this way.
+
+Return JSON only with these keys:
+- reason_summary
+- news_summary
+- chart_summary
+- filter_summary
+
+Context:
+symbol: BTCUSDT
+raw_signal: {risk_result.get("raw_signal")}
+final_signal: {risk_result.get("final_signal")}
+confidence: {risk_result.get("confidence")}%
+can_execute: {risk_result.get("can_execute")}
+risk_filter: {risk_result.get("filter_summary")}
+
+model_probability:
+prob_short: {ai_result.get("prob_short")}
+prob_hold: {ai_result.get("prob_hold")}
+prob_long: {ai_result.get("prob_long")}
+
+market_features:
+close: {market_ctx.get("close")}
+return_24h: {market_ctx.get("return_24h")}
+std_24h: {market_ctx.get("std_24h")}
+funding_rate: {market_ctx.get("funding_rate")}
+news_presence: {market_ctx.get("news_presence")}
+news_count_24h: {market_ctx.get("news_count_sum_24h")}
+news_count_72h: {market_ctx.get("news_count_sum_72h")}
+finbert_mean: {market_ctx.get("finbert_mean")}
+finbert_pos_sum: {market_ctx.get("finbert_pos_sum")}
+finbert_neg_sum: {market_ctx.get("finbert_neg_sum")}
+
+Style:
+- reason_summary: 2~3 sentences. Explain why LONG/SHORT/HOLD was selected.
+- news_summary: 1~2 sentences. Explain whether news influenced the signal.
+- chart_summary: 2~3 sentences. Mention trend, volatility, funding if useful.
+- filter_summary: 1~2 sentences. Explain risk filter result.
+"""
+
+    model_names = [
+        "gemini-2.5-flash",
+    ]
+
+    last_error = None
+
+    for model_name in model_names:
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+
+            text = response.text.strip()
+
+            if text.startswith("```"):
+                text = text.replace("```json", "").replace("```", "").strip()
+
+            parsed = json.loads(text)
+
+            required_keys = [
+                "reason_summary",
+                "news_summary",
+                "chart_summary",
+                "filter_summary",
+            ]
+
+            for key in required_keys:
+                if key not in parsed or not str(parsed[key]).strip():
+                    raise ValueError(f"Missing or empty key: {key}")
+
+            print(f"[GEMINI_EXPLANATION_OK] model={model_name}")
+
+            return {
+                "reason_summary": str(parsed["reason_summary"]).strip(),
+                "news_summary": str(parsed["news_summary"]).strip(),
+                "chart_summary": str(parsed["chart_summary"]).strip(),
+                "filter_summary": str(parsed["filter_summary"]).strip(),
+            }
+
+        except Exception as e:
+            last_error = e
+            print(f"[GEMINI_EXPLANATION_ERROR] model={model_name}, error={str(e)}")
+
+    print("[GEMINI_EXPLANATION_ERROR] all models failed:", str(last_error))
+    return None
 
 def build_reason_summary(
     ai_result: dict,
@@ -292,8 +411,9 @@ def build_signal_summaries(
     risk_result: dict,
 ) -> dict:
     """
-    AI 서버가 실제 summary를 주면 그것을 사용하고,
-    summary가 없거나 placeholder면 latest_merged_features.csv 기반 설명을 생성한다.
+    1순위: AI 서버가 실제 summary를 보내면 사용
+    2순위: Gemini로 자연어 설명 생성
+    3순위: 기존 feature 기반 템플릿 설명 사용
     """
 
     market_ctx = load_latest_market_context()
@@ -302,33 +422,33 @@ def build_signal_summaries(
     ai_news_summary = ai_result.get("news_summary")
     ai_chart_summary = ai_result.get("chart_summary")
 
-    if is_valid_summary_text(ai_reason):
-        reason_summary = ai_reason
-    else:
-        reason_summary = build_reason_summary(
-            ai_result=ai_result,
-            risk_result=risk_result,
-            market_ctx=market_ctx,
-        )
+    has_valid_ai_summaries = (
+        is_valid_summary_text(ai_reason)
+        and is_valid_summary_text(ai_news_summary)
+        and is_valid_summary_text(ai_chart_summary)
+    )
 
-    if is_valid_summary_text(ai_news_summary):
-        news_summary = ai_news_summary
-    else:
-        news_summary = build_news_summary(market_ctx)
+    if has_valid_ai_summaries:
+        return {
+            "reason_summary": ai_reason,
+            "news_summary": ai_news_summary,
+            "chart_summary": ai_chart_summary,
+            "filter_summary": risk_result["filter_summary"],
+        }
 
-    if is_valid_summary_text(ai_chart_summary):
-        chart_summary = ai_chart_summary
-    else:
-        chart_summary = build_chart_summary(market_ctx)
+    gemini_summaries = build_gemini_signal_summaries(
+        ai_result=ai_result,
+        risk_result=risk_result,
+        market_ctx=market_ctx,
+    )
 
-    filter_summary = risk_result["filter_summary"]
+    if gemini_summaries:
+        return gemini_summaries
 
-    return {
-        "reason_summary": reason_summary,
-        "news_summary": news_summary,
-        "chart_summary": chart_summary,
-        "filter_summary": filter_summary,
-    }
+    return build_fallback_summaries(
+        ai_result=ai_result,
+        risk_result=risk_result,
+    )
 
 
 @router.post("/mock", response_model=AISignalResponse)

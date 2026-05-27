@@ -11,6 +11,7 @@ function App() {
   const [page, setPage] = useState("home");
   const [currentUser, setCurrentUser] = useState(getStoredUser());
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [selectedHistoryRunId, setSelectedHistoryRunId] = useState(null);
 
   useEffect(() => {
     async function checkAuth() {
@@ -91,7 +92,14 @@ function App() {
         user={currentUser}
         onGoHome={() => setPage("home")}
         onGoLogin={() => setPage("login")}
-        onGoHistory={() => setPage("history")}
+        onGoHistory={() => {
+          setSelectedHistoryRunId(null);
+          setPage("history");
+        }}
+        onGoHistoryDetail={(runId) => {
+          setSelectedHistoryRunId(runId);
+          setPage("history");
+        }}
         onGoBacktest={() => setPage("backtest")}
         onLogout={handleLogout}
       />
@@ -102,6 +110,7 @@ function App() {
     return (
       <HistoryPage
         user={currentUser}
+        selectedRunId={selectedHistoryRunId}
         onGoHome={() => setPage("home")}
         onGoTrading={() => setPage("trading")}
         onGoBacktest={() => setPage("backtest")}

@@ -70,15 +70,25 @@ function AssetSummary({ user }) {
       setAssetLoading(true);
       setAssetError("");
 
-      const [exchangeData, paperData] = await Promise.all([
-        getExchangeBalance(),
-        getPaperPortfolioSummary("BTCUSDT"),
-      ]);
+      // Paper Asset은 필수
+      try {
+        const paperData = await getPaperPortfolioSummary("BTCUSDT");
+        setPaperPortfolio(paperData);
+      } catch (paperError) {
+        console.error("Failed to load paper portfolio:", paperError);
+        setAssetError(
+          paperError.message || "Failed to load paper portfolio data."
+        );
+      }
 
-      setAssetBalance(exchangeData);
-      setPaperPortfolio(paperData);
-    } catch (error) {
-      setAssetError(error.message || "Failed to load asset data.");
+      // Bybit Asset은 선택 정보. 실패해도 Paper Asset을 막지 않음.
+      try {
+        const exchangeData = await getExchangeBalance();
+        setAssetBalance(exchangeData);
+      } catch (exchangeError) {
+        console.warn("Bybit asset is not available:", exchangeError);
+        setAssetBalance(null);
+      }
     } finally {
       setAssetLoading(false);
     }

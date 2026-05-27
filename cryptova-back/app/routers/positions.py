@@ -1,7 +1,10 @@
 import json
 from datetime import datetime
+from typing import Optional
 
+import requests
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -98,6 +101,62 @@ def calculate_pnl(
     return round(pnl, 4), round(pnl_pct, 4)
 
 
+def fetch_current_price_from_bybit(symbol: str = "BTCUSDT") -> float:
+    """
+    Public ticker 조회.
+    API key 없이도 사용 가능하다.
+    Paper Portfolio / Paper PnL / Paper Close에서 사용한다.
+    """
+
+    url = "https://api.bybit.com/v5/market/tickers"
+
+    params = {
+        "category": "linear",
+        "symbol": symbol,
+    }
+
+    response = requests.get(url, params=params, timeout=10)
+    response.raise_for_status()
+
+    data = response.json()
+
+    result_list = data.get("result", {}).get("list", [])
+
+    if not result_list:
+        raise ValueError("Failed to fetch current price from Bybit public ticker.")
+
+    return float(result_list[0]["lastPrice"])
+
+
+def get_entry_order(
+    db: Session,
+    user_id: int,
+    position: TradingPosition,
+) -> Order | None:
+    if not position.entry_order_id:
+        return None
+
+    return (
+        db.query(Order)
+        .filter(Order.id == position.entry_order_id)
+        .filter(Order.user_id == user_id)
+        .first()
+    )
+
+
+def is_paper_or_dry_position(
+    position: TradingPosition,
+    entry_order: Order | None,
+) -> bool:
+    if bool(position.is_dry_run):
+        return True
+
+    if entry_order is None:
+        return False
+
+    return entry_order.status in ["PAPER_SUBMITTED", "DRY_RUN"]
+
+
 @router.get("/open", response_model=OpenPositionResponse | None)
 def get_current_open_position(
     symbol: str = "BTCUSDT",
@@ -134,54 +193,36 @@ def close_position(
         )
 
     try:
-        bybit_service, api_key_record = get_user_bybit_service(
-            db=db,
-            user_id=current_user.id,
-        )
+        now = datetime.utcnow()
 
-        # 현재가를 청산가로 사용
-        exit_price = bybit_service.get_ticker_price(symbol=symbol)
-
-        # LONG 포지션 청산은 Sell
-        # SHORT 포지션 청산은 Buy
         close_side = "Sell" if position.side == "LONG" else "Buy"
 
-        pnl, pnl_pct = calculate_pnl(
-            side=position.side,
-            entry_price=float(position.entry_price or 0),
-            exit_price=float(exit_price or 0),
-            qty=float(position.qty or 0),
+        entry_order = get_entry_order(
+            db=db,
+            user_id=current_user.id,
+            position=position,
         )
 
-        # 현재 포지션을 만든 진입 주문 조회
-        entry_order = None
-
-        if position.entry_order_id:
-            entry_order = (
-                db.query(Order)
-                .filter(Order.id == position.entry_order_id)
-                .filter(Order.user_id == current_user.id)
-                .first()
-            )
-
-        # entry_order가 PAPER_SUBMITTED이면 실제 거래소 포지션이 아니라
-        # 우리 DB에서만 관리하는 Paper 포지션임
-        is_paper_position = (
-            entry_order is not None
-            and entry_order.status == "PAPER_SUBMITTED"
+        is_paper_position = is_paper_or_dry_position(
+            position=position,
+            entry_order=entry_order,
         )
 
         # =========================
         # 1. Paper / Dry-run 청산
         # =========================
-        # - request.dry_run=True인 경우
-        # - 기존 포지션이 dry_run으로 생성된 경우
-        # - PAPER_SUBMITTED 주문으로 생성된 경우
-        #
-        # 위 경우에는 Bybit에 실제 청산 주문을 보내지 않고
-        # DB에서만 CLOSED 처리한다.
-        if request.dry_run or position.is_dry_run or is_paper_position:
-            if is_paper_position:
+        # Paper/Dry-run은 Bybit API key 없이 public ticker로 청산가를 가져온다.
+        if request.dry_run or is_paper_position:
+            exit_price = fetch_current_price_from_bybit(symbol=symbol)
+
+            pnl, pnl_pct = calculate_pnl(
+                side=position.side,
+                entry_price=float(position.entry_price or 0),
+                exit_price=float(exit_price or 0),
+                qty=float(position.qty or 0),
+            )
+
+            if entry_order is not None and entry_order.status == "PAPER_SUBMITTED":
                 close_status = "PAPER_CLOSED"
                 execution_mode = "PAPER"
                 close_message = (
@@ -192,14 +233,14 @@ def close_position(
                 close_status = "DRY_RUN"
                 execution_mode = "DRY_RUN"
                 close_message = (
-                    f"Dry run only. Would close {position.side} position "
-                    f"with {close_side} market order."
+                    f"Dry run only. {position.side} position was closed "
+                    f"at simulated exit price {exit_price}."
                 )
 
             close_order = Order(
                 user_id=current_user.id,
                 signal_id=position.signal_id,
-                exchange=api_key_record.exchange,
+                exchange=position.exchange or "paper",
                 symbol=symbol,
                 signal="CLOSE",
                 side=close_side,
@@ -214,8 +255,8 @@ def close_position(
                         "position_id": position.id,
                         "execution_mode": execution_mode,
                         "close_side": close_side,
-                        "qty": position.qty,
-                        "entry_price": position.entry_price,
+                        "qty": float(position.qty or 0),
+                        "entry_price": float(position.entry_price or 0),
                         "exit_price": exit_price,
                         "pnl": pnl,
                         "pnl_pct": pnl_pct,
@@ -225,10 +266,24 @@ def close_position(
             )
 
         # =========================
-        # 2. 실제 Bybit 청산
+        # 2. 실제 Bybit 포지션 청산
         # =========================
-        # 실제 Bybit에 열린 포지션인 경우에만 reduceOnly=True로 청산 주문을 보낸다.
+        # 실제 Bybit 포지션은 API key가 필요하다.
         else:
+            bybit_service, api_key_record = get_user_bybit_service(
+                db=db,
+                user_id=current_user.id,
+            )
+
+            exit_price = bybit_service.get_ticker_price(symbol=symbol)
+
+            pnl, pnl_pct = calculate_pnl(
+                side=position.side,
+                entry_price=float(position.entry_price or 0),
+                exit_price=float(exit_price or 0),
+                qty=float(position.qty or 0),
+            )
+
             close_result = bybit_service.place_market_order(
                 symbol=symbol,
                 side=close_side,
@@ -260,7 +315,7 @@ def close_position(
         # =========================
         position.status = "CLOSED"
         position.exit_price = exit_price
-        position.closed_at = datetime.utcnow()
+        position.closed_at = now
         position.pnl = pnl
         position.pnl_pct = pnl_pct
 
@@ -292,10 +347,13 @@ def close_position(
         raise
 
     except Exception as e:
+        db.rollback()
+
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Failed to close position: {str(e)}",
         )
+
 
 @router.get("/open/pnl", response_model=OpenPositionPnlResponse | None)
 def get_open_position_pnl(
@@ -313,12 +371,9 @@ def get_open_position_pnl(
         return None
 
     try:
-        bybit_service, api_key_record = get_user_bybit_service(
-            db=db,
-            user_id=current_user.id,
-        )
-
-        current_price = bybit_service.get_ticker_price(symbol=symbol)
+        # Paper/Dry-run/실제 포지션 모두 public ticker로 현재가를 조회한다.
+        # 이렇게 하면 새 계정에 Bybit API key가 없어도 Paper PnL 확인이 가능하다.
+        current_price = fetch_current_price_from_bybit(symbol=symbol)
 
         pnl, pnl_pct = calculate_pnl(
             side=position.side,
@@ -345,19 +400,6 @@ def get_open_position_pnl(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Failed to calculate open position PnL: {str(e)}",
         )
-    
-from datetime import datetime
-from typing import Optional
-
-import requests
-from fastapi import Depends
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
-
-from app.database import get_db
-from app.models.trading_position import TradingPosition
-from app.models.user import User
-from app.routers.auth import get_current_user
 
 
 class PaperPortfolioSummaryResponse(BaseModel):
@@ -382,27 +424,6 @@ class PaperPortfolioSummaryResponse(BaseModel):
     open_trade_count: int
 
     updated_at: datetime
-
-
-def fetch_current_price_from_bybit(symbol: str = "BTCUSDT") -> float:
-    url = "https://api-testnet.bybit.com/v5/market/tickers"
-
-    params = {
-        "category": "linear",
-        "symbol": symbol,
-    }
-
-    response = requests.get(url, params=params, timeout=10)
-    response.raise_for_status()
-
-    data = response.json()
-
-    result_list = data.get("result", {}).get("list", [])
-
-    if not result_list:
-        raise ValueError("Failed to fetch current price from Bybit.")
-
-    return float(result_list[0]["lastPrice"])
 
 
 @router.get("/paper-portfolio", response_model=PaperPortfolioSummaryResponse)
@@ -442,20 +463,26 @@ def get_paper_portfolio_summary(
     open_position = open_positions[0] if open_positions else None
 
     if open_position is not None:
-        current_price = fetch_current_price_from_bybit(symbol)
+        try:
+            current_price = fetch_current_price_from_bybit(symbol=symbol)
+        except Exception:
+            # public ticker 실패 시에도 Paper Portfolio 전체가 죽지 않도록 한다.
+            current_price = float(open_position.entry_price or 0)
 
-        qty = float(open_position.qty)
-        entry_price = float(open_position.entry_price)
+        qty = float(open_position.qty or 0)
+        entry_price = float(open_position.entry_price or 0)
 
-        if open_position.side == "LONG":
-            unrealized_pnl = (current_price - entry_price) * qty
-        elif open_position.side == "SHORT":
-            unrealized_pnl = (entry_price - current_price) * qty
+        if current_price and entry_price and qty:
+            if open_position.side == "LONG":
+                unrealized_pnl = (current_price - entry_price) * qty
+            elif open_position.side == "SHORT":
+                unrealized_pnl = (entry_price - current_price) * qty
 
     total_pnl = realized_pnl + unrealized_pnl
     paper_total_asset = initial_balance + total_pnl
 
     total_pnl_pct = 0.0
+
     if initial_balance > 0:
         total_pnl_pct = (total_pnl / initial_balance) * 100
 
@@ -474,9 +501,11 @@ def get_paper_portfolio_summary(
         open_position_id=open_position.id if open_position else None,
         open_position_side=open_position.side if open_position else None,
         open_position_qty=float(open_position.qty) if open_position else None,
-        open_position_entry_price=float(open_position.entry_price)
-        if open_position
-        else None,
+        open_position_entry_price=(
+            float(open_position.entry_price)
+            if open_position and open_position.entry_price is not None
+            else None
+        ),
         current_price=current_price,
 
         closed_trade_count=len(closed_positions),

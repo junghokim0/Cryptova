@@ -101,9 +101,15 @@ function HomePage({ user, onGoHome,onGoTrading, onGoLogin, onGoSignup, onGoHisto
           </p>
 
           <div className="hero-actions">
-            <button type="button" className="primary-action" onClick={onGoLogin}>
-              Login / Sign Up <span>→</span>
-            </button>
+            {user ? (
+              <button type="button" className="primary-action" onClick={onGoTrading}>
+                Go to Trading <span>→</span>
+              </button>
+            ) : (
+              <button type="button" className="primary-action" onClick={onGoLogin}>
+                Login / Sign Up <span>→</span>
+              </button>
+            )}
           </div>
         </section>
 

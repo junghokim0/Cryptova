@@ -113,8 +113,6 @@ function LoginPage({ onGoSignup, onGoHome, onLoginSuccess }) {
               <input type="checkbox" defaultChecked />
               <span>Remember me</span>
             </label>
-
-            <a href="#forgot">Forgot password?</a>
           </div>
 
           <button type="submit" className="login-button" disabled={isLoading}>
