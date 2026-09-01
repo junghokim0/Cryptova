@@ -4,6 +4,9 @@ Cryptova is an AI-powered cryptocurrency trading assistant system.
 
 The project consists of a React frontend, FastAPI backend, AI inference server, and MySQL database. Users can register, log in, save trading strategies, and validate automated paper trading workflows based on AI-generated LONG, SHORT, and HOLD signals.
 
+> [!IMPORTANT]
+> A fresh clone contains the application and research source code but not all runtime artifacts. Before starting the AI server, provide the trained checkpoint at `cryptova-ai/models/best_model.pt`, the prepared feature file at `cryptova-ai/data/merged/latest_merged_features.csv`, and the local `chart_only/timesnet_encoder.py` module expected by `fusion_model.py`. These paths are excluded from Git. Without them, the frontend and backend can be inspected, but real AI inference cannot start.
+
 ---
 
 # 1. Environment Requirements
@@ -122,7 +125,7 @@ Notes:
 Navigate to the backend directory.
 
 ```powershell
-cd C:\Users\User\Desktop\Cryptova\cryptova-back
+cd Cryptova\cryptova-back
 ```
 
 Create a virtual environment.
@@ -174,7 +177,7 @@ http://127.0.0.1:8000/docs
 Navigate to the AI server directory.
 
 ```powershell
-cd C:\Users\User\Desktop\Cryptova\cryptova-ai
+cd Cryptova\cryptova-ai
 ```
 
 Create and activate a virtual environment.
@@ -199,7 +202,7 @@ pip install fastapi uvicorn pandas numpy torch scikit-learn
 Start the AI server.
 
 ```powershell
-python -m uvicorn app:app --port 8001 --reload
+python -m uvicorn main:app --port 8001 --reload
 ```
 
 AI Server URL:
@@ -221,7 +224,7 @@ POST http://127.0.0.1:8001/predict/latest
 Navigate to the frontend directory.
 
 ```powershell
-cd C:\Users\User\Desktop\Cryptova\cryptova-ui
+cd Cryptova\cryptova-ui
 ```
 
 Install npm packages.
@@ -462,8 +465,8 @@ The AI server is not running or the configured port is incorrect.
 Restart the AI server.
 
 ```powershell
-cd C:\Users\User\Desktop\Cryptova\cryptova-ai
-python -m uvicorn app:app --port 8001 --reload
+cd Cryptova\cryptova-ai
+python -m uvicorn main:app --port 8001 --reload
 ```
 
 Verify that the backend is configured to use:
