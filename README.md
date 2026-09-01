@@ -4,7 +4,7 @@
 
 Cryptova combines hourly Bitcoin market features with aggregated financial-news sentiment to predict one of three 24-hour market signals: `SHORT`, `HOLD`, or `LONG`. The repository contains the fusion-model research code and a local web application for inspecting signals, configuring risk controls, running paper-trading workflows, and reviewing backtests.
 
-![Cryptova application](cryptova-ui/src/assets/hero.png)
+![Cryptova application](cryptova-ui/src/assets/logo.png)
 
 > [!WARNING]
 > Cryptova is an educational and research project. Its signals and backtests are not financial advice, do not guarantee future performance, and should not be used as the sole basis for live trading.
