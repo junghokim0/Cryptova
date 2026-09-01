@@ -5,7 +5,7 @@ Cryptova is an AI-powered cryptocurrency trading assistant system.
 The project consists of a React frontend, FastAPI backend, AI inference server, and MySQL database. Users can register, log in, save trading strategies, and validate automated paper trading workflows based on AI-generated LONG, SHORT, and HOLD signals.
 
 > [!IMPORTANT]
-> A fresh clone contains the application and research source code but not all runtime artifacts. Before starting the AI server, provide the trained checkpoint at `cryptova-ai/models/best_model.pt`, the prepared feature file at `cryptova-ai/data/merged/latest_merged_features.csv`, and the local `chart_only/timesnet_encoder.py` module expected by `fusion_model.py`. These paths are excluded from Git. Without them, the frontend and backend can be inspected, but real AI inference cannot start.
+> A fresh clone contains the application, TimesNet encoder, fusion model, and data-pipeline source code but not all runtime artifacts. Before starting the AI server, provide the trained checkpoint at `cryptova-ai/models/best_model.pt` and the prepared feature file at `cryptova-ai/data/merged/latest_merged_features.csv`. The AI server imports the included encoder from `trading/chart_only/timesnet_encoder.py`. Generated data and model checkpoints are excluded from Git, so real AI inference cannot start until those artifacts are supplied.
 
 ---
 

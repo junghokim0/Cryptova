@@ -97,7 +97,7 @@ install.md                Detailed local installation and run guide
 
 ## Quick start
 
-Cryptova is a multi-service application and requires Python 3.10+, Node.js 18+, npm, MySQL 8.x, the trained checkpoint, the TimesNet chart encoder, and prepared inference features. Follow [`install.md`](install.md) for the complete setup.
+Cryptova is a multi-service application and requires Python 3.10+, Node.js 18+, npm, MySQL 8.x, a trained checkpoint, and prepared inference features. The TimesNet chart encoder source is included under `trading/chart_only/`. Follow [`install.md`](install.md) for the complete setup.
 
 After configuring the required local artifacts and backend `.env` file, start the services in separate terminals:
 
@@ -119,14 +119,13 @@ Then open `http://localhost:5173`. Backend OpenAPI documentation is available at
 
 ## Research and runtime artifacts
 
-The repository includes the model definition, training workflow, prediction export code, risk-filter backtest, backend, and frontend. Large or sensitive artifacts are intentionally excluded by `.gitignore`, including:
+The repository includes the TimesNet encoder, fusion-model definition, data collection and preprocessing code, rolling-dataset builder, training workflow, prediction export code, risk-filter backtest, backend, and frontend. Generated or sensitive artifacts are intentionally excluded by `.gitignore`, including:
 
-- raw and processed datasets under `data/`
+- generated raw, processed, and windowed dataset files under `data/`
 - trained checkpoints under `models/`
-- the local `chart_only/` TimesNet encoder dependency
 - `.env` files and API credentials
 
-Consequently, a fresh clone is suitable for source inspection but is **not inference-ready until those artifacts are supplied**. The public benchmark publishes evaluation-ready prediction artifacts and evaluator code separately; it does not make this repository's omitted datasets, provider-licensed news content, or trained weights public.
+Consequently, a fresh clone contains the model and data-pipeline source but is **not inference-ready until the generated features and trained checkpoint are supplied**. The public benchmark publishes evaluation-ready prediction artifacts and evaluator code separately; it does not make this repository's omitted datasets, provider-licensed news content, or trained weights public.
 
 ## Documentation
 

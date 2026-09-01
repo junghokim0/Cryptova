@@ -52,11 +52,12 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
 try:
-    from chart_only.timesnet_encoder import TimesNetEncoder
+    from trading.chart_only.timesnet_encoder import TimesNetEncoder
 except ImportError as e:
     raise ImportError(
-        "chart_only/timesnet_encoder.py 안에 TimesNetEncoder 클래스가 있는지 확인해줘.\n"
-        "예상 경로: chart_only/timesnet_encoder.py"
+        "trading/chart_only/timesnet_encoder.py 안에 "
+        "TimesNetEncoder 클래스가 있는지 확인해줘.\n"
+        "예상 경로: trading/chart_only/timesnet_encoder.py"
     ) from e
 
 
