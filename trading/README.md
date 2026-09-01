@@ -354,6 +354,17 @@ Funding rate and volatility are external risk filters, not additional Fusion-mod
 
 ### Confidence-threshold selection
 
+Argmax always chooses one class even when the three probabilities are nearly tied. For example, `[0.34, 0.33, 0.33]` becomes `SHORT`, although the model has little evidence for distinguishing that direction from `HOLD` or `LONG`. Executing every such low-confidence directional output can create unnecessary positions and repeatedly incur fees and slippage.
+
+The confidence threshold was introduced to separate **direction prediction** from **trade eligibility**. Its purpose is not to increase the model's raw classification score. It suppresses uncertain directional predictions, reduces avoidable turnover, and keeps only signals for which the model expresses sufficient conviction.
+
+```text
+Fusion probabilities
+→ Is the highest probability sufficiently confident?
+   ├─ Yes: keep SHORT or LONG
+   └─ No:  convert the prediction to HOLD
+```
+
 For every Validation sample, `confidence = max(softmax(logits))`. If confidence is below a candidate threshold, the predicted class is changed to `HOLD`. The candidate grid is:
 
 ```text
@@ -363,7 +374,31 @@ For every Validation sample, `confidence = max(softmax(logits))`. If confidence 
 
 Candidates with a non-overlapping trade ratio outside `[0.01, 0.30]` are discarded when possible. The remaining candidates are sorted lexicographically by average trade return, cumulative return, Sharpe-like score, win rate, Validation Macro F1, and proximity of the trade ratio to `0.05`. The selected threshold is then applied unchanged to Test predictions.
 
+In the connected evaluation, confidence filtering reduced the number of trades from 178 to 158 and changed the cost-adjusted return from `-18.11%` to `+7.42%`, while Macro F1 decreased slightly from `0.381875` to `0.376506`. This is consistent with the intended role of the threshold: it improved trade selection by rejecting uncertain signals rather than improving the neural classifier itself.
+
 ### Funding and volatility filter
+
+Confidence alone does not describe how market participants are positioned. Validation-period error analysis indicated that some accepted LONG signals produced unnecessary exposure. Cryptova-Full therefore adds a separate positioning-aware decision layer after confidence filtering.
+
+Funding rate has a deliberately limited role in this system:
+
+- it is **not** one of the 12 chart or nine news inputs to the Fusion model;
+- it is **not** forecast by the model;
+- it is **not** accumulated as a realized funding payment;
+- it is **not** deducted from the reported backtest return;
+- it is used only as an external proxy for market positioning and potential LONG crowding.
+
+Accordingly, Cryptova-Full is a **positioning-aware signal-filtering system**, not a funding-cost-adjusted return model. The neural network predicts direction from chart and news data; the external filter then asks whether an otherwise accepted LONG signal remains suitable given current positioning conditions.
+
+```text
+Chart + News Fusion model
+→ directional probabilities
+→ confidence-based trade eligibility
+→ funding/volatility positioning check
+→ final SHORT / HOLD / LONG signal
+```
+
+A high positive funding rate is treated as evidence that LONG positioning may be crowded. High funding by itself does not necessarily invalidate a LONG signal because it can also occur during a strong trend. Low volatility by itself is also insufficient because it may simply describe a stable market. The implemented hypothesis is narrower: when funding is high but volatility is low, LONG positioning may be crowded without enough price movement to justify additional exposure. Such LONG predictions are converted to `HOLD`.
 
 Cryptova-Full starts from the confidence-filtered predictions. The risk-filter script searches funding thresholds from `-0.0002` through `0.0010` and volatility thresholds from `0.008` through `0.025` on Validation data. The implemented rule is directional and asymmetric:
 
@@ -374,7 +409,11 @@ if prediction == LONG
        prediction = HOLD
 ```
 
-It does not modify `SHORT` or existing `HOLD` predictions. The threshold pair is selected lexicographically by Validation average trade return, cumulative return, Sharpe-like score, and maximum drawdown, then frozen for Test.
+It does not modify `SHORT` or existing `HOLD` predictions. This asymmetry reflects the specific unnecessary-LONG pattern identified during Validation analysis; it does not establish that SHORT signals are inherently safe. A symmetric crowded-SHORT rule would be a separate strategy and would require its own Validation design and untouched evaluation.
+
+The threshold pair is selected lexicographically by Validation average trade return, cumulative return, Sharpe-like score, and maximum drawdown, then frozen for Test. From Base to Full, the filter reduced trades from 158 to 119, increased the connected cost-adjusted return from `+7.42%` to `+27.46%`, and improved maximum drawdown from `-37.38%` to `-24.40%`. At the same time, LONG recall fell from `0.3062` to `0.1724` and Macro F1 fell from `0.376506` to `0.350898`. The filter therefore improved the selected trading path by reducing LONG exposure; it did not improve the model's directional classification ability.
+
+Because the filter structure and thresholds were developed from Validation performance, the result may contain Validation-selection bias. The LONG-only positioning rule should be treated as exploratory until it is confirmed without modification on a newly untouched holdout period.
 
 ### Non-overlapping backtest
 
